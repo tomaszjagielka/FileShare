@@ -1,0 +1,322 @@
+/* Root container */
+#root {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 2rem;
+}
+
+/* Main container */
+.container {
+  width: 100%;
+}
+
+/* Header styles */
+header {
+  text-align: center;
+  margin-bottom: 3rem;
+}
+
+.subtitle {
+  color: #888;
+  margin-top: -1rem;
+}
+
+/* Upload area */
+.upload-container {
+  margin-bottom: 2rem;
+}
+
+.drop-zone {
+  border: 2px dashed #646cff;
+  border-radius: 8px;
+  padding: 2rem;
+  text-align: center;
+  background: rgba(100, 108, 255, 0.05);
+}
+
+.drop-zone.dragging {
+  background: rgba(100, 108, 255, 0.1);
+}
+
+.file-input {
+  display: none;
+}
+
+.file-input-label {
+  background: #646cff;
+  color: white;
+  padding: 0.6em 1.2em;
+  border-radius: 8px;
+  cursor: pointer;
+  display: inline-block;
+  margin-top: 1rem;
+}
+
+.file-input-label:hover {
+  background: #535bf2;
+}
+
+/* File list */
+.file-list {
+  margin-top: 2rem;
+}
+
+.file-list h2 {
+  margin-bottom: 1.5rem;
+  font-size: 1.8rem;
+}
+
+.files {
+  display: grid;
+  gap: 1rem;
+}
+
+.file-item {
+  display: flex;
+  align-items: center;
+  padding: 1rem;
+  border: 1px solid #646cff;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.file-icon {
+  font-size: 2rem;
+  margin-right: 1rem;
+}
+
+.file-details {
+  flex: 1;
+  min-width: 200px;
+}
+
+.file-name {
+  font-weight: 500;
+  font-size: 1.1rem;
+  margin-bottom: 0.5rem;
+}
+
+.file-info {
+  display: flex;
+  gap: 1rem;
+  color: #888;
+  font-size: 0.9rem;
+  flex-wrap: wrap;
+}
+
+.server-info {
+  color: #646cff;
+}
+
+.share-button {
+  background: #646cff;
+  color: white;
+  border: none;
+  padding: 0.6em 1.2em;
+  border-radius: 8px;
+  cursor: pointer;
+  margin-left: 1rem;
+}
+
+.share-button:hover {
+  background: #535bf2;
+}
+
+.share-link {
+  margin-top: 0.5rem;
+  color: #646cff;
+  word-break: break-all;
+}
+
+/* Mobile responsiveness */
+@media (max-width: 640px) {
+  .file-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+
+  .share-button {
+    margin-left: 0;
+    width: 100%;
+  }
+}
+
+/* Server Status */
+.server-status {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid #646cff;
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 2rem;
+}
+
+.server-status h3 {
+  margin: 0 0 1rem 0;
+  font-size: 1.2rem;
+}
+
+.status-info {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.status-item {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+}
+
+.status-label {
+  color: #888;
+  min-width: 160px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.status-value {
+  color: #646cff;
+  flex: 1;
+  padding-right: 1rem;
+}
+
+.server-list {
+  word-break: break-word;
+  line-height: 1.4;
+  max-width: calc(100% - 160px);
+}
+
+.server-status.error {
+  color: #ff4646;
+  border-color: #ff4646;
+}
+
+.server-status.loading {
+  color: #888;
+}
+
+/* Update mobile styles */
+@media (max-width: 640px) {
+  .status-item {
+    flex-direction: column;
+    gap: 0.2rem;
+  }
+  
+  .status-label {
+    min-width: auto;
+    white-space: normal;
+  }
+
+  .server-list {
+    max-width: 100%;
+    margin-top: 0.2rem;
+  }
+}
+
+.server-selector {
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.server-selector label {
+  color: #888;
+}
+
+.server-selector select {
+  padding: 0.5rem;
+  border-radius: 6px;
+  border: 1px solid #646cff;
+  background: rgba(255, 255, 255, 0.03);
+  color: #fff;
+  cursor: pointer;
+  flex: 1;
+  max-width: 400px;
+  appearance: none;
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23646cff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+  background-repeat: no-repeat;
+  background-position: right 0.7rem center;
+  background-size: 1em;
+  padding-right: 2.5rem;
+}
+
+.server-selector select option {
+  background-color: #242424;
+  color: #fff;
+  padding: 0.8rem;
+}
+
+.server-selector select option:hover,
+.server-selector select option:focus {
+  background-color: #646cff;
+}
+
+.server-selector select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  border-color: #4b4b4b;
+}
+
+.server-selector select:focus {
+  outline: none;
+  border-color: #535bf2;
+  box-shadow: 0 0 0 2px rgba(100, 108, 255, 0.2);
+}
+
+/* Update mobile styles */
+@media (max-width: 640px) {
+  .server-selector {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.25rem;
+  }
+  
+  .server-selector select {
+    max-width: none;
+  }
+}
+
+.file-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-left: 1rem;
+}
+
+.action-button {
+  background: #646cff;
+  color: white;
+  border: none;
+  padding: 0.6em 1.2em;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: background-color 0.2s;
+}
+
+.action-button:hover {
+  background: #535bf2;
+}
+
+.copy-button {
+  background: #4b4b4b;
+}
+
+.copy-button:hover {
+  background: #5a5a5a;
+}
+
+/* Update mobile styles for file actions */
+@media (max-width: 640px) {
+  .file-actions {
+    margin-left: 0;
+    width: 100%;
+    flex-direction: row;
+    gap: 0.5rem;
+  }
+
+  .action-button {
+    flex: 1;
+    text-align: center;
+  }
+}
