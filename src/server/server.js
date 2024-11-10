@@ -213,11 +213,16 @@ function connectToServer(serverUrl) {
   })
 
   socket.on('file-available', (fileInfo) => {
-    fileRegistry.set(fileInfo.fileId, fileInfo)
-    // Propagate to other servers
-    for (const [url, info] of connectedServers.entries()) {
-      if (info.socket && info.socket.id !== socket.id) {
-        info.socket.emit('file-available', fileInfo)
+    console.log(`Received file-available for ${fileInfo.fileId} from ${fileInfo.serverUrl}`)
+    // Only add if we don't already have this file
+    if (!fileRegistry.has(fileInfo.fileId)) {
+      fileRegistry.set(fileInfo.fileId, fileInfo)
+      // Propagate to other servers except the one we got it from
+      for (const [url, info] of connectedServers.entries()) {
+        if (info.socket && info.socket.id !== socket.id) {
+          console.log(`Propagating file ${fileInfo.fileId} to ${url}`)
+          info.socket.emit('file-available', fileInfo)
+        }
       }
     }
   })
@@ -322,6 +327,7 @@ io.on('connection', (socket) => {
     socket.emit('known-servers', serverList)
     
     // Send our complete file registry to the new server
+    console.log(`Sending file registry (${fileRegistry.size} files) to ${serverInfo.name}`)
     socket.emit('file-registry', Object.fromEntries(fileRegistry))
   })
 
@@ -500,9 +506,11 @@ app.post('/upload', upload.single('file'), async (req, res) => {
     // Register file in local registry
     fileRegistry.set(fileId, fileInfo)
 
-    // Broadcast to other servers
-    for (const [_, info] of connectedServers.entries()) {
-      if (info.socket) {
+    // Broadcast to ALL connected servers
+    console.log(`Broadcasting new file ${fileId} to ${connectedServers.size} servers`)
+    for (const [url, info] of connectedServers.entries()) {
+      if (info.socket?.connected) {
+        console.log(`Sending file-available to ${url}`)
         info.socket.emit('file-available', fileInfo)
       }
     }
