@@ -12,8 +12,8 @@
     "dev:all": "concurrently \"npm run dev:server1\" \"npm run dev:server2\" \"npm run dev:frontend1\" \"npm run dev:frontend2\"",
     "dev:frontend1": "vite --mode server1 --port 5173",
     "dev:frontend2": "vite --mode server2 --port 5174",
-    "dev:server1": "cross-env PORT=3000 SERVER_URL=http://localhost:3000 node src/server/server.js",
-    "dev:server2": "cross-env PORT=3001 SERVER_URL=http://localhost:3001 KNOWN_SERVERS=http://localhost:3000 node src/server/server.js"
+    "dev:server1": "cross-env PORT=3001 SERVER_URL=http://localhost:3001 node src/server/server.js",
+    "dev:server2": "cross-env PORT=3002 SERVER_URL=http://localhost:3002 KNOWN_SERVERS=http://localhost:3001 node src/server/server.js"
   },
   "dependencies": {
     "cors": "^2.8.5",

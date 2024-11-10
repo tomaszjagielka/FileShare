@@ -78,13 +78,13 @@ const saveMetadata = () => {
 // Server registry and file registry
 const connectedServers = new Map() // serverUrl -> socket
 const fileRegistry = new Map() // fileId -> { serverUrl, filename, size }
-const MY_URL = process.env.SERVER_URL || 'http://localhost:3000'
+const MY_URL = process.env.SERVER_URL || 'http://localhost:3001'
 
 // Known server list (could be loaded from config or environment)
 const knownServers = (process.env.KNOWN_SERVERS || '').split(',').filter(Boolean)
 
 // Move PORT declaration to the top with other constants
-const PORT = process.env.PORT || 3000
+const PORT = process.env.PORT || 3001
 
 // Function to get MAC address
 function getMacAddress() {

@@ -5,7 +5,7 @@ import react from '@vitejs/plugin-react'
 export default defineConfig(({ mode }) => {
   // Use different ports for different modes
   const port = mode === 'server1' ? 5173 : mode === 'server2' ? 5174 : 5173
-  const serverUrl = mode === 'server1' ? 'http://localhost:3000' : 'http://localhost:3001'
+  const serverUrl = mode === 'server1' ? 'http://localhost:3001' : 'http://localhost:3002'
 
   return {
     plugins: [react()],
