@@ -318,6 +318,12 @@ io.on('connection', (socket) => {
       }
     }
   })
+
+  // Add handler for request-registry event
+  socket.on('request-registry', () => {
+    console.log(`Registry requested by ${socket.id}`)
+    socket.emit('file-registry', Array.from(fileRegistry.values()))
+  })
 })
 
 // Connect to known servers on startup
@@ -478,19 +484,57 @@ app.get('/download/:fileId', async (req, res) => {
   }
 })
 
-app.get('/files', (req, res) => {
-  // Request registry from all connected servers
-  for (const [url, info] of connectedServers.entries()) {
-    if (info.socket?.connected) {
-      console.log(`Requesting registry from ${url}`)
-      // Send in array format
-      info.socket.emit('file-registry', Array.from(fileRegistry.values()))
+app.get('/files', async (req, res) => {
+  // Create a promise that resolves when we receive registry updates
+  const registryUpdates = new Promise((resolve) => {
+    const newFiles = new Map(fileRegistry) // Start with current registry
+    let pendingResponses = 0
+    
+    // Handler for receiving registry updates
+    const handleRegistry = (data) => {
+      const files = Array.isArray(data) ? data : (data.files ? Object.values(data.files) : [])
+      files.forEach(file => {
+        if (!newFiles.has(file.fileId)) {
+          newFiles.set(file.fileId, file)
+        }
+      })
+      pendingResponses--
+      
+      if (pendingResponses <= 0) {
+        // All responses received or no connected servers
+        resolve(Array.from(newFiles.values()))
+      }
     }
-  }
 
-  // Return current known files
-  const files = Array.from(fileRegistry.values())
-  res.json(files)
+    // Request registry from all connected servers
+    for (const [url, info] of connectedServers.entries()) {
+      if (info.socket?.connected) {
+        console.log(`Requesting registry from ${url}`)
+        pendingResponses++
+        info.socket.once('file-registry', handleRegistry)
+        info.socket.emit('request-registry')
+      }
+    }
+
+    // If no connected servers, resolve immediately
+    if (pendingResponses === 0) {
+      resolve(Array.from(newFiles.values()))
+    }
+
+    // Timeout after 5 seconds
+    setTimeout(() => {
+      resolve(Array.from(newFiles.values()))
+    }, 5000)
+  })
+
+  try {
+    const files = await registryUpdates
+    res.json(files)
+  } catch (error) {
+    console.error('Error fetching files:', error)
+    // Return current known files if there's an error
+    res.json(Array.from(fileRegistry.values()))
+  }
 })
 
 // Add a new endpoint to get server status
