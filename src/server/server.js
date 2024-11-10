@@ -184,7 +184,7 @@ io.on('connection', (socket) => {
   socket.on('register-server', (serverInfo) => {
     console.log(`Server registered: ${serverInfo.name} (${serverInfo.url})`)
     connectedServers.set(serverInfo.url, {
-      socket: socket,
+      socket,
       name: serverInfo.name
     })
 
@@ -343,8 +343,10 @@ app.get('/download/:fileId', async (req, res) => {
   }
 
   // If file is on another server, proxy the request
-  const serverSocket = connectedServers.get(fileInfo.serverUrl)?.socket
-  if (!serverSocket) {
+  const serverInfo = connectedServers.get(fileInfo.serverUrl)
+  if (!serverInfo || !serverInfo.socket) {
+    console.error(`Server not available: ${fileInfo.serverUrl}`)
+    console.debug('Connected servers:', Array.from(connectedServers.keys()))
     return res.status(404).json({ error: 'Server not available' })
   }
 
@@ -354,27 +356,38 @@ app.get('/download/:fileId', async (req, res) => {
     
     // Create a promise that will resolve when we get the file data
     const fileDataPromise = new Promise((resolve, reject) => {
-      // Set up one-time handlers for the response
-      serverSocket.once('file-data', (data, responseId) => {
+      const cleanup = () => {
+        serverInfo.socket.off('file-data', handleFileData)
+        serverInfo.socket.off('file-error', handleFileError)
+      }
+
+      const handleFileData = (data, responseId) => {
         if (responseId === requestId) {
+          cleanup()
           resolve(data)
         }
-      })
-      
-      serverSocket.once('file-error', (error, responseId) => {
+      }
+
+      const handleFileError = (error, responseId) => {
         if (responseId === requestId) {
+          cleanup()
           reject(new Error(error.message || 'Failed to fetch file'))
         }
-      })
+      }
+
+      // Set up handlers for the response
+      serverInfo.socket.on('file-data', handleFileData)
+      serverInfo.socket.on('file-error', handleFileError)
 
       // Set a timeout
-      setTimeout(() => {
+      const timeout = setTimeout(() => {
+        cleanup()
         reject(new Error('Request timed out'))
-      }, 30000) // 30 second timeout
+      }, 30000)
     })
 
     // Request file from the other server
-    serverSocket.emit('request-file', { fileId, requestId })
+    serverInfo.socket.emit('request-file', { fileId, requestId })
 
     // Wait for the response
     const fileData = await fileDataPromise
@@ -420,4 +433,13 @@ httpServer.listen(PORT, '0.0.0.0', () => {
   
   // Scan existing files
   scanExistingFiles()
-}) 
+})
+
+// Add this near the start of the file
+setInterval(() => {
+  console.log('Connected servers:', Array.from(connectedServers.entries()).map(([url, info]) => ({
+    url,
+    name: info.name,
+    connected: info.socket?.connected
+  })))
+}, 10000) 
