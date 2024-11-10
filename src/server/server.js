@@ -252,97 +252,56 @@ function connectToServer(serverUrl) {
       // If another server has it, try to get it from them
       else {
         console.log(`Requesting file ${fileId} from ${fileInfo.serverUrl}`)
-        // Find the best path to the source server
-        const sourceServer = connectedServers.get(cleanServerUrl(fileInfo.serverUrl))
-        
-        if (!sourceServer?.socket?.connected) {
-          // Try to find an alternative path through connected servers
-          for (const [url, info] of connectedServers.entries()) {
-            if (info.socket?.connected) {
-              console.log(`Trying alternative path through ${url}`)
-              try {
-                const fileData = await new Promise((resolve, reject) => {
-                  const cleanup = () => {
-                    info.socket.off('file-data', handleData)
-                    info.socket.off('file-error', handleError)
-                    clearTimeout(timeoutId)
-                  }
+        // Try each connected server until we find the file
+        for (const [url, info] of connectedServers.entries()) {
+          if (info.socket?.connected) {
+            try {
+              const fileData = await new Promise((resolve, reject) => {
+                const cleanup = () => {
+                  info.socket.off('file-data', handleData)
+                  info.socket.off('file-error', handleError)
+                  clearTimeout(timeoutId)
+                }
 
-                  const handleData = (data, respId) => {
-                    if (respId === requestId) {
-                      cleanup()
-                      resolve(data)
-                    }
-                  }
-
-                  const handleError = (error, respId) => {
-                    if (respId === requestId) {
-                      cleanup()
-                      reject(new Error(error.message || 'Failed to fetch file'))
-                    }
-                  }
-
-                  info.socket.on('file-data', handleData)
-                  info.socket.on('file-error', handleError)
-                  info.socket.emit('request-file', { fileId, requestId })
-
-                  const timeoutId = setTimeout(() => {
+                const handleData = (data, respId) => {
+                  if (respId === requestId) {
                     cleanup()
-                    reject(new Error('Request timed out'))
-                  }, 30000)
-                })
+                    resolve(data)
+                  }
+                }
 
-                // If we got the file, send it back
-                socket.emit('file-data', fileData, requestId)
-                return
-              } catch (error) {
-                console.log(`Failed to get file through ${url}:`, error.message)
-                // Continue trying other servers
-              }
+                const handleError = (error, respId) => {
+                  if (respId === requestId) {
+                    cleanup()
+                    reject(new Error(error.message || 'Failed to fetch file'))
+                  }
+                }
+
+                info.socket.on('file-data', handleData)
+                info.socket.on('file-error', handleError)
+                info.socket.emit('request-file', { fileId, requestId })
+
+                const timeoutId = setTimeout(() => {
+                  cleanup()
+                  reject(new Error('Request timed out'))
+                }, 30000)
+              })
+
+              // If we got the file, send it back
+              socket.emit('file-data', fileData, requestId)
+              return
+            } catch (error) {
+              console.log(`Failed to get file from ${url}:`, error.message)
+              // Continue trying other servers
             }
           }
-          
-          // If we get here, we couldn't find a path to the file
-          socket.emit('file-error', { 
-            error: 'No available path to source server', 
-            requestId 
-          })
-          return
         }
-
-        // Direct connection to source server available
-        const fileData = await new Promise((resolve, reject) => {
-          const cleanup = () => {
-            sourceServer.socket.off('file-data', handleData)
-            sourceServer.socket.off('file-error', handleError)
-            clearTimeout(timeoutId)
-          }
-
-          const handleData = (data, respId) => {
-            if (respId === requestId) {
-              cleanup()
-              resolve(data)
-            }
-          }
-
-          const handleError = (error, respId) => {
-            if (respId === requestId) {
-              cleanup()
-              reject(new Error(error.message || 'Failed to fetch file'))
-            }
-          }
-
-          sourceServer.socket.on('file-data', handleData)
-          sourceServer.socket.on('file-error', handleError)
-          sourceServer.socket.emit('request-file', { fileId, requestId })
-
-          const timeoutId = setTimeout(() => {
-            cleanup()
-            reject(new Error('Request timed out'))
-          }, 30000)
+        
+        // If we get here, we couldn't find the file
+        socket.emit('file-error', { 
+          error: 'File not available from any connected server', 
+          requestId 
         })
-
-        socket.emit('file-data', fileData, requestId)
       }
     } catch (error) {
       console.error(`Error handling file request for ${fileId}:`, error)
@@ -478,13 +437,8 @@ io.on('connection', (socket) => {
   })
 
   socket.on('file-available', (fileInfo) => {
+    console.log(`Received file info for ${fileInfo.fileId} from ${fileInfo.serverUrl}`)
     fileRegistry.set(fileInfo.fileId, fileInfo)
-    // Propagate to other servers
-    for (const [url, info] of connectedServers.entries()) {
-      if (info.socket && info.socket.id !== socket.id) {
-        info.socket.emit('file-available', fileInfo)
-      }
-    }
   })
 
   socket.on('disconnect', () => {
@@ -533,7 +487,7 @@ const scanExistingFiles = () => {
   }
 }
 
-// Update upload handler with better error handling
+// Update upload handler to just notify connected servers
 app.post('/upload', upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
@@ -544,7 +498,6 @@ app.post('/upload', upload.single('file'), async (req, res) => {
     const fileId = file.filename
     const uploadDate = new Date().toISOString()
 
-    // Create file info object with all required fields
     const fileInfo = {
       fileId: fileId,
       serverUrl: MY_URL,
@@ -556,30 +509,25 @@ app.post('/upload', upload.single('file'), async (req, res) => {
       uploadDate: uploadDate
     }
 
-    // Store file metadata
+    // Store metadata
     fileMetadata.set(fileId, {
       originalName: file.originalname,
       uploadDate: uploadDate,
       serverName: serverName,
       mimeType: file.mimetype
     })
-
-    // Save metadata to file
     saveMetadata()
 
-    // Register file in local registry
+    // Add to local registry
     fileRegistry.set(fileId, fileInfo)
 
-    // Broadcast to ALL connected servers
-    console.log(`Broadcasting new file ${fileId} to ${connectedServers.size} servers`)
-    for (const [url, info] of connectedServers.entries()) {
+    // Notify connected servers
+    for (const [_, info] of connectedServers.entries()) {
       if (info.socket?.connected) {
-        console.log(`Sending file-available to ${url}`)
         info.socket.emit('file-available', fileInfo)
       }
     }
 
-    // Send response with all required fields
     res.json(fileInfo)
   } catch (error) {
     console.error('Upload error:', error)
