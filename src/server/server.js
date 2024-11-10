@@ -198,13 +198,16 @@ function connectToServer(serverUrl) {
   })
 
   socket.on('file-registry', (files) => {
+    console.log(`Received file registry with ${Object.keys(files).length} files`)
     // Update our registry with files from other server
     for (const [fileId, fileInfo] of Object.entries(files)) {
       if (!fileRegistry.has(fileId)) {
+        console.log(`Adding new file to registry: ${fileId} from ${fileInfo.serverUrl}`)
         fileRegistry.set(fileId, fileInfo)
         // Propagate to other servers except the one we got it from
         for (const [url, info] of connectedServers.entries()) {
-          if (info.socket && info.socket.id !== socket.id) {
+          if (info.socket?.connected && info.socket.id !== socket.id) {
+            console.log(`Propagating file ${fileId} to ${url}`)
             info.socket.emit('file-available', fileInfo)
           }
         }
@@ -214,12 +217,12 @@ function connectToServer(serverUrl) {
 
   socket.on('file-available', (fileInfo) => {
     console.log(`Received file-available for ${fileInfo.fileId} from ${fileInfo.serverUrl}`)
-    // Only add if we don't already have this file
     if (!fileRegistry.has(fileInfo.fileId)) {
+      console.log(`Adding new file to registry: ${fileInfo.fileId}`)
       fileRegistry.set(fileInfo.fileId, fileInfo)
       // Propagate to other servers except the one we got it from
       for (const [url, info] of connectedServers.entries()) {
-        if (info.socket && info.socket.id !== socket.id) {
+        if (info.socket?.connected && info.socket.id !== socket.id) {
           console.log(`Propagating file ${fileInfo.fileId} to ${url}`)
           info.socket.emit('file-available', fileInfo)
         }
@@ -329,6 +332,10 @@ io.on('connection', (socket) => {
     // Send our complete file registry to the new server
     console.log(`Sending file registry (${fileRegistry.size} files) to ${serverInfo.name}`)
     socket.emit('file-registry', Object.fromEntries(fileRegistry))
+
+    // Request their file registry as well
+    console.log(`Requesting file registry from ${serverInfo.name}`)
+    socket.emit('request-registry')
   })
 
   socket.on('request-file', async ({ fileId, requestId }) => {
