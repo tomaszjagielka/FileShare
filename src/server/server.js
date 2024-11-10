@@ -182,13 +182,12 @@ io.on('connection', (socket) => {
       name: serverInfo.name
     })
 
-    // Send our registry to the new server
-    console.log(`Sending our file registry to ${serverInfo.name}`)
-    socket.emit('file-registry', Object.fromEntries(fileRegistry))
-
-    // Request their registry as well
-    console.log(`Requesting file registry from ${serverInfo.name}`)
-    socket.emit('request-registry')
+    // Send our file registry to the new server
+    socket.emit('file-registry', {
+      files: Object.fromEntries(fileRegistry),
+      source: MY_URL,
+      propagateId: uuidv4() // Add propagation ID to prevent loops
+    })
   })
 
   socket.on('file-available', (fileInfo) => {
@@ -271,9 +270,11 @@ io.on('connection', (socket) => {
     socket.emit('file-registry', Object.fromEntries(fileRegistry))
   })
 
-  socket.on('file-registry', (files) => {
-    console.log(`Received file registry with ${Object.keys(files).length} files`)
+  socket.on('file-registry', ({ files, source, propagateId }) => {
+    console.log(`Received file registry from ${source} with ${Object.keys(files).length} files`)
     let newFiles = 0
+
+    // Update our registry with new files
     for (const [fileId, fileInfo] of Object.entries(files)) {
       if (!fileRegistry.has(fileId)) {
         console.log(`Adding new file to registry: ${fileId} from ${fileInfo.serverUrl}`)
@@ -281,8 +282,64 @@ io.on('connection', (socket) => {
         newFiles++
       }
     }
+
     if (newFiles > 0) {
-      console.log(`Added ${newFiles} new files to registry`)
+      console.log(`Added ${newFiles} new files from ${source}`)
+      
+      // Notify the source server of any files they don't have
+      const ourFiles = Array.from(fileRegistry.entries())
+        .filter(([fileId]) => !files[fileId])
+        .reduce((acc, [fileId, info]) => {
+          acc[fileId] = info
+          return acc
+        }, {})
+
+      if (Object.keys(ourFiles).length > 0) {
+        const sourceServer = connectedServers.get(cleanServerUrl(source))
+        if (sourceServer?.socket?.connected) {
+          console.log(`Sending ${Object.keys(ourFiles).length} files back to ${source}`)
+          sourceServer.socket.emit('file-registry', {
+            files: ourFiles,
+            source: MY_URL,
+            propagateId
+          })
+        }
+      }
+
+      // Propagate new files to other connected servers
+      for (const [url, info] of connectedServers.entries()) {
+        if (info.socket?.connected && url !== source) {
+          console.log(`Propagating ${newFiles} files to ${url}`)
+          info.socket.emit('file-registry', {
+            files,
+            source: MY_URL,
+            propagateId
+          })
+        }
+      }
+    }
+  })
+
+  // Add a refresh-registry event handler
+  socket.on('refresh-registry', ({ source, propagateId }) => {
+    console.log(`Registry refresh requested by ${source}`)
+    
+    // Send our complete registry back
+    socket.emit('file-registry', {
+      files: Object.fromEntries(fileRegistry),
+      source: MY_URL,
+      propagateId
+    })
+
+    // Propagate refresh request to other servers
+    for (const [url, info] of connectedServers.entries()) {
+      if (info.socket?.connected && url !== source) {
+        console.log(`Propagating registry refresh request to ${url}`)
+        info.socket.emit('refresh-registry', {
+          source: MY_URL,
+          propagateId
+        })
+      }
     }
   })
 })
@@ -446,6 +503,19 @@ app.get('/download/:fileId', async (req, res) => {
 })
 
 app.get('/files', (req, res) => {
+  // Trigger registry refresh from connected servers
+  const propagateId = uuidv4()
+  for (const [url, info] of connectedServers.entries()) {
+    if (info.socket?.connected) {
+      console.log(`Requesting registry refresh from ${url}`)
+      info.socket.emit('refresh-registry', {
+        source: MY_URL,
+        propagateId
+      })
+    }
+  }
+
+  // Return current known files immediately
   const files = Array.from(fileRegistry.values())
   res.json(files)
 })
