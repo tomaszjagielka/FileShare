@@ -150,20 +150,14 @@ function connectToServer(serverUrl) {
       name: undefined
     })
 
-    socket.emit('request-registry')
-    
+    // Send our info immediately on connection
     socket.emit('register-server', {
       url: MY_URL,
       name: serverName
     })
-  })
 
-  socket.on('connect_error', (error) => {
-    console.error(`Connection error to ${cleanUrl}:`, error.message)
-  })
-
-  socket.on('disconnect', (reason) => {
-    console.log(`Disconnected from server: ${cleanUrl}, reason: ${reason}`)
+    // Then request their registry
+    socket.emit('request-registry')
   })
 
   return socket
@@ -185,24 +179,28 @@ io.on('connection', (socket) => {
     // Send our complete file registry to the new server
     console.log(`Sending file registry (${fileRegistry.size} files) to ${serverInfo.name}`)
     socket.emit('file-registry', Object.fromEntries(fileRegistry))
-  })
 
-  socket.on('file-available', (fileInfo) => {
-    console.log(`Received file info for ${fileInfo.fileId} from ${fileInfo.serverUrl}`)
-    if (!fileRegistry.has(fileInfo.fileId)) {
-      fileRegistry.set(fileInfo.fileId, fileInfo)
-      // Propagate to other connected servers
-      for (const [_, info] of connectedServers.entries()) {
-        if (info.socket?.connected && info.socket.id !== socket.id) {
-          info.socket.emit('file-available', fileInfo)
-        }
-      }
-    }
+    // Send our server info back to ensure bidirectional registration
+    socket.emit('register-server', {
+      url: MY_URL,
+      name: serverName
+    })
   })
 
   socket.on('request-registry', () => {
     console.log(`Registry requested by ${socket.id}`)
+    // Always send registry with server info
     socket.emit('file-registry', Object.fromEntries(fileRegistry))
+    
+    // Also send our server info if not registered yet
+    const requestingServer = Array.from(connectedServers.entries())
+      .find(([_, info]) => info.socket.id === socket.id)
+    if (!requestingServer || !requestingServer[1].name) {
+      socket.emit('register-server', {
+        url: MY_URL,
+        name: serverName
+      })
+    }
   })
 
   socket.on('file-registry', (files) => {
@@ -220,6 +218,19 @@ io.on('connection', (socket) => {
     
     if (newFiles > 0) {
       console.log(`Added ${newFiles} new files to registry`)
+    }
+  })
+
+  socket.on('file-available', (fileInfo) => {
+    console.log(`Received file info for ${fileInfo.fileId} from ${fileInfo.serverUrl}`)
+    if (!fileRegistry.has(fileInfo.fileId)) {
+      fileRegistry.set(fileInfo.fileId, fileInfo)
+      // Propagate to other connected servers
+      for (const [_, info] of connectedServers.entries()) {
+        if (info.socket?.connected && info.socket.id !== socket.id) {
+          info.socket.emit('file-available', fileInfo)
+        }
+      }
     }
   })
 
@@ -312,6 +323,19 @@ io.on('connection', (socket) => {
           source: MY_URL,
           propagateId
         })
+      }
+    }
+  })
+
+  // Add disconnect handler
+  socket.on('disconnect', () => {
+    console.log(`Client disconnected: ${socket.id}`)
+    // Clean up disconnected server from our registry
+    for (const [url, info] of connectedServers.entries()) {
+      if (info.socket.id === socket.id) {
+        console.log(`Removing disconnected server: ${url}`)
+        connectedServers.delete(url)
+        break
       }
     }
   })
