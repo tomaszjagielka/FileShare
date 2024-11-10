@@ -139,6 +139,12 @@ function connectToServer(serverUrl) {
     for (const [fileId, fileInfo] of Object.entries(files)) {
       if (!fileRegistry.has(fileId)) {
         fileRegistry.set(fileId, fileInfo)
+        // Propagate to other servers except the one we got it from
+        for (const [url, info] of connectedServers.entries()) {
+          if (info.socket && info.socket.id !== socket.id) {
+            info.socket.emit('file-available', fileInfo)
+          }
+        }
       }
     }
   })
@@ -188,6 +194,9 @@ io.on('connection', (socket) => {
       name: info.name
     }))
     socket.emit('known-servers', serverList)
+    
+    // Send our complete file registry to the new server
+    socket.emit('file-registry', Object.fromEntries(fileRegistry))
   })
 
   socket.on('request-registry', () => {
@@ -328,25 +337,59 @@ app.get('/download/:fileId', async (req, res) => {
   }
 
   // If file is local, serve it directly
-  if (fileInfo.serverUrl === (process.env.SERVER_URL || 'http://localhost:3000')) {
+  if (fileInfo.serverUrl === MY_URL) {
     const filePath = path.join('./uploads', fileInfo.filename)
     return res.download(filePath, fileInfo.originalName)
   }
 
   // If file is on another server, proxy the request
-  const serverSocket = connectedServers.get(fileInfo.serverUrl)
+  const serverSocket = connectedServers.get(fileInfo.serverUrl)?.socket
   if (!serverSocket) {
     return res.status(404).json({ error: 'Server not available' })
   }
 
-  // Request file from the other server
-  serverSocket.emit('request-file', { fileId, requestId: uuidv4() })
-  // Handle file transfer through WebSocket
-  serverSocket.once('file-data', (data) => {
+  try {
+    // Generate a unique request ID
+    const requestId = uuidv4()
+    
+    // Create a promise that will resolve when we get the file data
+    const fileDataPromise = new Promise((resolve, reject) => {
+      // Set up one-time handlers for the response
+      serverSocket.once('file-data', (data, responseId) => {
+        if (responseId === requestId) {
+          resolve(data)
+        }
+      })
+      
+      serverSocket.once('file-error', (error, responseId) => {
+        if (responseId === requestId) {
+          reject(new Error(error.message || 'Failed to fetch file'))
+        }
+      })
+
+      // Set a timeout
+      setTimeout(() => {
+        reject(new Error('Request timed out'))
+      }, 30000) // 30 second timeout
+    })
+
+    // Request file from the other server
+    serverSocket.emit('request-file', { fileId, requestId })
+
+    // Wait for the response
+    const fileData = await fileDataPromise
+
+    // Send the file to the client
     res.set('Content-Type', fileInfo.mimeType)
     res.set('Content-Disposition', `attachment; filename="${fileInfo.originalName}"`)
-    res.send(data)
-  })
+    res.send(fileData)
+  } catch (error) {
+    console.error('Error downloading remote file:', error)
+    res.status(500).json({ 
+      error: 'Failed to download file', 
+      details: error.message 
+    })
+  }
 })
 
 app.get('/files', (req, res) => {
