@@ -185,6 +185,11 @@ io.on('connection', (socket) => {
     socket.emit('file-registry', Object.fromEntries(fileRegistry))
   })
 
+  socket.on('file-available', (fileInfo) => {
+    console.log(`Received file-available for ${fileInfo.fileId} from ${fileInfo.serverUrl}`)
+    fileRegistry.set(fileInfo.fileId, fileInfo)
+  })
+
   socket.on('request-file', async ({ fileId, requestId }) => {
     console.log(`File request received for ${fileId} with requestId ${requestId}`)
     const fileInfo = fileRegistry.get(fileId)
@@ -199,14 +204,53 @@ io.on('connection', (socket) => {
 
     try {
       if (fileInfo.serverUrl === MY_URL) {
+        console.log(`Serving local file: ${fileId}`)
         const filePath = path.join('./uploads', fileInfo.filename)
         const fileData = await fs.promises.readFile(filePath)
         socket.emit('file-data', fileData, requestId)
       } else {
-        socket.emit('file-error', { 
-          error: 'File not available on this server', 
-          requestId 
+        const sourceServer = connectedServers.get(cleanServerUrl(fileInfo.serverUrl))
+        if (!sourceServer?.socket?.connected) {
+          socket.emit('file-error', { 
+            error: 'Source server not available', 
+            requestId 
+          })
+          return
+        }
+
+        console.log(`Forwarding file request to ${fileInfo.serverUrl}`)
+        const fileData = await new Promise((resolve, reject) => {
+          const cleanup = () => {
+            sourceServer.socket.off('file-data', handleData)
+            sourceServer.socket.off('file-error', handleError)
+            clearTimeout(timeoutId)
+          }
+
+          const handleData = (data, respId) => {
+            if (respId === requestId) {
+              cleanup()
+              resolve(data)
+            }
+          }
+
+          const handleError = (error, respId) => {
+            if (respId === requestId) {
+              cleanup()
+              reject(new Error(error.message || 'Failed to fetch file'))
+            }
+          }
+
+          sourceServer.socket.on('file-data', handleData)
+          sourceServer.socket.on('file-error', handleError)
+          sourceServer.socket.emit('request-file', { fileId, requestId })
+
+          const timeoutId = setTimeout(() => {
+            cleanup()
+            reject(new Error('Request timed out'))
+          }, 30000)
         })
+
+        socket.emit('file-data', fileData, requestId)
       }
     } catch (error) {
       console.error(`Error serving file ${fileId}:`, error)
@@ -322,18 +366,12 @@ app.get('/download/:fileId', async (req, res) => {
 
   console.log('Download request for:', fileId)
   console.log('File info:', fileInfo)
-  console.log('Connected servers:', Array.from(connectedServers.entries()).map(([url, info]) => ({
-    url,
-    name: info.name,
-    connected: info.socket?.connected
-  })))
 
   if (!fileInfo) {
     return res.status(404).json({ error: 'File not found in registry' })
   }
 
   try {
-    // Clean the URLs before comparison
     const cleanFileServerUrl = cleanServerUrl(fileInfo.serverUrl)
     
     // If file is local, serve it directly
@@ -345,20 +383,12 @@ app.get('/download/:fileId', async (req, res) => {
     // Get the server that has the file
     const sourceServer = connectedServers.get(cleanFileServerUrl)
     if (!sourceServer?.socket?.connected) {
-      console.error(`Source server not available or not connected: ${cleanFileServerUrl}`)
-      console.debug('Connected servers:', Array.from(connectedServers.keys()))
-      console.debug('Server connection status:', {
-        hasServer: !!sourceServer,
-        hasSocket: !!sourceServer?.socket,
-        isConnected: sourceServer?.socket?.connected
-      })
+      console.error(`Source server not available: ${cleanFileServerUrl}`)
       return res.status(404).json({ error: 'Source server not available' })
     }
 
-    // Generate a unique request ID
-    const requestId = uuidv4()
-    
     // Request file from the source server
+    const requestId = uuidv4()
     const fileData = await new Promise((resolve, reject) => {
       const cleanup = () => {
         sourceServer.socket.off('file-data', handleData)
