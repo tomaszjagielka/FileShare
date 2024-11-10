@@ -199,19 +199,17 @@ function connectToServer(serverUrl) {
 
   socket.on('file-registry', (files) => {
     console.log(`Received file registry with ${Object.keys(files).length} files`)
+    let newFiles = 0
     // Update our registry with files from other server
     for (const [fileId, fileInfo] of Object.entries(files)) {
       if (!fileRegistry.has(fileId)) {
         console.log(`Adding new file to registry: ${fileId} from ${fileInfo.serverUrl}`)
         fileRegistry.set(fileId, fileInfo)
-        // Propagate to other servers except the one we got it from
-        for (const [url, info] of connectedServers.entries()) {
-          if (info.socket?.connected && info.socket.id !== socket.id) {
-            console.log(`Propagating file ${fileId} to ${url}`)
-            info.socket.emit('file-available', fileInfo)
-          }
-        }
+        newFiles++
       }
+    }
+    if (newFiles > 0) {
+      console.log(`Added ${newFiles} new files to registry`)
     }
   })
 
@@ -231,66 +229,125 @@ function connectToServer(serverUrl) {
   })
 
   socket.on('request-file', async ({ fileId, requestId }) => {
+    console.log(`File request received for ${fileId} with requestId ${requestId}`)
     const fileInfo = fileRegistry.get(fileId)
-    if (fileInfo) {
-      try {
-        // If we have the file locally, send it
-        if (fileInfo.serverUrl === MY_URL) {
-          const filePath = path.join('./uploads', fileInfo.filename)
-          const fileData = await fs.promises.readFile(filePath)
-          socket.emit('file-data', fileData, requestId)
-        } 
-        // If we know another server has it, proxy the request
-        else {
-          const sourceServer = connectedServers.get(fileInfo.serverUrl)
-          if (sourceServer?.socket) {
-            // Create a promise to wait for the response
-            const fileData = await new Promise((resolve, reject) => {
-              const handleData = (data, respId) => {
-                if (respId === requestId) {
-                  sourceServer.socket.off('file-data', handleData)
-                  sourceServer.socket.off('file-error', handleError)
-                  resolve(data)
-                }
-              }
-
-              const handleError = (error, respId) => {
-                if (respId === requestId) {
-                  sourceServer.socket.off('file-data', handleData)
-                  sourceServer.socket.off('file-error', handleError)
-                  reject(error)
-                }
-              }
-
-              sourceServer.socket.on('file-data', handleData)
-              sourceServer.socket.on('file-error', handleError)
-              sourceServer.socket.emit('request-file', { fileId, requestId })
-
-              // Set timeout
-              setTimeout(() => {
-                sourceServer.socket.off('file-data', handleData)
-                sourceServer.socket.off('file-error', handleError)
-                reject(new Error('Request timed out'))
-              }, 30000)
-            })
-
-            socket.emit('file-data', fileData, requestId)
-          } else {
-            socket.emit('file-error', { 
-              error: 'Source server not available', 
-              requestId 
-            })
-          }
-        }
-      } catch (error) {
-        socket.emit('file-error', { 
-          error: error.message || 'Failed to fetch file', 
-          requestId 
-        })
-      }
-    } else {
+    
+    if (!fileInfo) {
+      console.log(`File not found in registry: ${fileId}`)
       socket.emit('file-error', { 
         error: 'File not found in registry', 
+        requestId 
+      })
+      return
+    }
+
+    try {
+      // If we have the file locally, send it
+      if (fileInfo.serverUrl === MY_URL) {
+        console.log(`Serving local file: ${fileId}`)
+        const filePath = path.join('./uploads', fileInfo.filename)
+        const fileData = await fs.promises.readFile(filePath)
+        socket.emit('file-data', fileData, requestId)
+      } 
+      // If another server has it, try to get it from them
+      else {
+        console.log(`Requesting file ${fileId} from ${fileInfo.serverUrl}`)
+        // Find the best path to the source server
+        const sourceServer = connectedServers.get(cleanServerUrl(fileInfo.serverUrl))
+        
+        if (!sourceServer?.socket?.connected) {
+          // Try to find an alternative path through connected servers
+          for (const [url, info] of connectedServers.entries()) {
+            if (info.socket?.connected) {
+              console.log(`Trying alternative path through ${url}`)
+              try {
+                const fileData = await new Promise((resolve, reject) => {
+                  const cleanup = () => {
+                    info.socket.off('file-data', handleData)
+                    info.socket.off('file-error', handleError)
+                    clearTimeout(timeoutId)
+                  }
+
+                  const handleData = (data, respId) => {
+                    if (respId === requestId) {
+                      cleanup()
+                      resolve(data)
+                    }
+                  }
+
+                  const handleError = (error, respId) => {
+                    if (respId === requestId) {
+                      cleanup()
+                      reject(new Error(error.message || 'Failed to fetch file'))
+                    }
+                  }
+
+                  info.socket.on('file-data', handleData)
+                  info.socket.on('file-error', handleError)
+                  info.socket.emit('request-file', { fileId, requestId })
+
+                  const timeoutId = setTimeout(() => {
+                    cleanup()
+                    reject(new Error('Request timed out'))
+                  }, 30000)
+                })
+
+                // If we got the file, send it back
+                socket.emit('file-data', fileData, requestId)
+                return
+              } catch (error) {
+                console.log(`Failed to get file through ${url}:`, error.message)
+                // Continue trying other servers
+              }
+            }
+          }
+          
+          // If we get here, we couldn't find a path to the file
+          socket.emit('file-error', { 
+            error: 'No available path to source server', 
+            requestId 
+          })
+          return
+        }
+
+        // Direct connection to source server available
+        const fileData = await new Promise((resolve, reject) => {
+          const cleanup = () => {
+            sourceServer.socket.off('file-data', handleData)
+            sourceServer.socket.off('file-error', handleError)
+            clearTimeout(timeoutId)
+          }
+
+          const handleData = (data, respId) => {
+            if (respId === requestId) {
+              cleanup()
+              resolve(data)
+            }
+          }
+
+          const handleError = (error, respId) => {
+            if (respId === requestId) {
+              cleanup()
+              reject(new Error(error.message || 'Failed to fetch file'))
+            }
+          }
+
+          sourceServer.socket.on('file-data', handleData)
+          sourceServer.socket.on('file-error', handleError)
+          sourceServer.socket.emit('request-file', { fileId, requestId })
+
+          const timeoutId = setTimeout(() => {
+            cleanup()
+            reject(new Error('Request timed out'))
+          }, 30000)
+        })
+
+        socket.emit('file-data', fileData, requestId)
+      }
+    } catch (error) {
+      console.error(`Error handling file request for ${fileId}:`, error)
+      socket.emit('file-error', { 
+        error: error.message || 'Failed to fetch file', 
         requestId 
       })
     }
