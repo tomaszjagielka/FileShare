@@ -14,7 +14,7 @@
     "dev:frontend2": "vite --mode server2 --port 5174",
     "dev:server1": "cross-env PORT=3001 SERVER_URL=http://localhost:3001 node src/server/server.js",
     "dev:server2": "cross-env PORT=3002 SERVER_URL=http://localhost:3002 KNOWN_SERVERS=http://localhost:3001 node src/server/server.js",
-    "build:prod": "VITE_SERVER_URL=https://meshshare.hackerping.com/ vite build"
+    "build:prod": "VITE_SERVER_URL=https://meshshare.hackerping.com vite build"
   },
   "dependencies": {
     "cors": "^2.8.5",
