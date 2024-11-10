@@ -524,7 +524,7 @@ app.get('/files', async (req, res) => {
     // Timeout after 5 seconds
     setTimeout(() => {
       resolve(Array.from(newFiles.values()))
-    }, 5000)
+    }, 10000)
   })
 
   try {
