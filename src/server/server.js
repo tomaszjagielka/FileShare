@@ -115,23 +115,56 @@ const serverName = `${username}@${macAddress.slice(-6)}:${PORT}` // Use the PORT
 // Connect to known servers
 function connectToServer(serverUrl) {
   if (serverUrl === MY_URL) return // Don't connect to self
+  if (!serverUrl) return // Don't connect to empty URLs
   
-  console.log(`Attempting to connect to server: ${serverUrl}`)
-  const socket = SocketClient(serverUrl)
+  // Clean the URL to ensure consistent formatting
+  const cleanUrl = serverUrl.trim().replace(/\/$/, '')
+  
+  // If we're already connected to this server, don't try to connect again
+  if (connectedServers.has(cleanUrl)) {
+    const existingConnection = connectedServers.get(cleanUrl)
+    if (existingConnection.socket?.connected) {
+      return existingConnection.socket
+    }
+  }
+  
+  console.log(`Attempting to connect to server: ${cleanUrl}`)
+  const socket = SocketClient(cleanUrl, {
+    reconnection: true,
+    reconnectionDelay: 5000,
+    reconnectionAttempts: 5,
+    timeout: 10000
+  })
+
+  let reconnectAttempts = 0
+  const MAX_RECONNECT_ATTEMPTS = 5
 
   socket.on('connect', () => {
-    console.log(`Connected to server: ${serverUrl}`)
+    console.log(`Connected to server: ${cleanUrl}`)
+    reconnectAttempts = 0 // Reset attempts on successful connection
     socket.emit('register-server', {
       url: MY_URL,
       name: serverName
     })
   })
 
-  socket.on('disconnect', () => {
-    console.log(`Disconnected from server: ${serverUrl}`)
-    connectedServers.delete(serverUrl)
-    // Attempt to reconnect after delay
-    setTimeout(() => connectToServer(serverUrl), 5000)
+  socket.on('connect_error', (error) => {
+    console.error(`Connection error to ${cleanUrl}:`, error.message)
+    reconnectAttempts++
+    
+    if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+      console.log(`Max reconnection attempts reached for ${cleanUrl}, giving up`)
+      socket.disconnect()
+      connectedServers.delete(cleanUrl)
+    }
+  })
+
+  socket.on('disconnect', (reason) => {
+    console.log(`Disconnected from server: ${cleanUrl}, reason: ${reason}`)
+    // Only remove from connectedServers if we've exceeded max attempts
+    if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+      connectedServers.delete(cleanUrl)
+    }
   })
 
   socket.on('file-registry', (files) => {
@@ -172,7 +205,11 @@ function connectToServer(serverUrl) {
     }
   })
 
-  connectedServers.set(serverUrl, socket)
+  // Store the socket with the cleaned URL
+  connectedServers.set(cleanUrl, {
+    socket,
+    name: undefined // Will be set when server registers
+  })
 
   return socket
 }
@@ -182,17 +219,28 @@ io.on('connection', (socket) => {
   console.log('New connection:', socket.id)
 
   socket.on('register-server', (serverInfo) => {
-    console.log(`Server registered: ${serverInfo.name} (${serverInfo.url})`)
-    connectedServers.set(serverInfo.url, {
-      socket,
-      name: serverInfo.name
-    })
+    const cleanUrl = serverInfo.url.trim().replace(/\/$/, '')
+    console.log(`Server registered: ${serverInfo.name} (${cleanUrl})`)
+    
+    // Update or create the server entry
+    const existingServer = connectedServers.get(cleanUrl)
+    if (existingServer) {
+      existingServer.name = serverInfo.name
+    } else {
+      connectedServers.set(cleanUrl, {
+        socket,
+        name: serverInfo.name
+      })
+    }
 
     // Send back list of servers with their names
-    const serverList = Array.from(connectedServers.entries()).map(([url, info]) => ({
-      url,
-      name: info.name
-    }))
+    const serverList = Array.from(connectedServers.entries())
+      .filter(([_, info]) => info.socket?.connected) // Only include connected servers
+      .map(([url, info]) => ({
+        url,
+        name: info.name
+      }))
+    
     socket.emit('known-servers', serverList)
     
     // Send our complete file registry to the new server
@@ -415,10 +463,12 @@ app.get('/status', (req, res) => {
   const status = {
     serverUrl: MY_URL,
     serverName: serverName,
-    connectedServers: Array.from(connectedServers.entries()).map(([url, info]) => ({
-      url,
-      name: info.name || `${url} (Unknown)`
-    })),
+    connectedServers: Array.from(connectedServers.entries())
+      .filter(([_, info]) => info.socket?.connected) // Only include connected servers
+      .map(([url, info]) => ({
+        url,
+        name: info.name || `${url} (Unknown)`
+      })),
     totalFiles: fileRegistry.size
   }
   res.json(status)
