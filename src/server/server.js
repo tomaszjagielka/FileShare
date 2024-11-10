@@ -279,6 +279,7 @@ io.on('connection', (socket) => {
     const existingServer = connectedServers.get(cleanUrl)
     if (existingServer) {
       existingServer.name = serverInfo.name
+      existingServer.socket = socket // Update the socket reference
     } else {
       connectedServers.set(cleanUrl, {
         socket,
@@ -288,7 +289,7 @@ io.on('connection', (socket) => {
 
     // Send back list of servers with their names
     const serverList = Array.from(connectedServers.entries())
-      .filter(([_, info]) => info.socket?.connected) // Only include connected servers
+      .filter(([_, info]) => info.socket?.connected)
       .map(([url, info]) => ({
         url,
         name: info.name
@@ -298,6 +299,83 @@ io.on('connection', (socket) => {
     
     // Send our complete file registry to the new server
     socket.emit('file-registry', Object.fromEntries(fileRegistry))
+  })
+
+  socket.on('request-file', async ({ fileId, requestId }) => {
+    console.log(`File request received for ${fileId} with requestId ${requestId}`)
+    const fileInfo = fileRegistry.get(fileId)
+    
+    if (!fileInfo) {
+      console.log(`File not found in registry: ${fileId}`)
+      socket.emit('file-error', { 
+        error: 'File not found in registry', 
+        requestId 
+      })
+      return
+    }
+
+    try {
+      // If we have the file locally, send it
+      if (fileInfo.serverUrl === MY_URL) {
+        console.log(`Serving local file: ${fileId}`)
+        const filePath = path.join('./uploads', fileInfo.filename)
+        const fileData = await fs.promises.readFile(filePath)
+        socket.emit('file-data', fileData, requestId)
+      } 
+      // If we know another server has it, proxy the request
+      else {
+        console.log(`Proxying request for file ${fileId} to ${fileInfo.serverUrl}`)
+        const sourceServer = connectedServers.get(fileInfo.serverUrl)
+        if (!sourceServer?.socket?.connected) {
+          console.error(`Source server not available or not connected: ${fileInfo.serverUrl}`)
+          socket.emit('file-error', { 
+            error: 'Source server not available', 
+            requestId 
+          })
+          return
+        }
+
+        // Create a promise to wait for the response
+        const fileData = await new Promise((resolve, reject) => {
+          const cleanup = () => {
+            sourceServer.socket.off('file-data', handleData)
+            sourceServer.socket.off('file-error', handleError)
+            clearTimeout(timeoutId)
+          }
+
+          const handleData = (data, respId) => {
+            if (respId === requestId) {
+              cleanup()
+              resolve(data)
+            }
+          }
+
+          const handleError = (error, respId) => {
+            if (respId === requestId) {
+              cleanup()
+              reject(new Error(error.message || 'Failed to fetch file'))
+            }
+          }
+
+          sourceServer.socket.on('file-data', handleData)
+          sourceServer.socket.on('file-error', handleError)
+          sourceServer.socket.emit('request-file', { fileId, requestId })
+
+          const timeoutId = setTimeout(() => {
+            cleanup()
+            reject(new Error('Request timed out'))
+          }, 30000)
+        })
+
+        socket.emit('file-data', fileData, requestId)
+      }
+    } catch (error) {
+      console.error(`Error handling file request for ${fileId}:`, error)
+      socket.emit('file-error', { 
+        error: error.message || 'Failed to fetch file', 
+        requestId 
+      })
+    }
   })
 
   socket.on('request-registry', () => {
@@ -311,19 +389,6 @@ io.on('connection', (socket) => {
     for (const [url, info] of connectedServers.entries()) {
       if (info.socket && info.socket.id !== socket.id) {
         info.socket.emit('file-available', fileInfo)
-      }
-    }
-  })
-
-  socket.on('request-file', async ({ fileId, requestId }) => {
-    const fileInfo = fileRegistry.get(fileId)
-    if (fileInfo && fileInfo.serverUrl === MY_URL) {
-      try {
-        const filePath = path.join('./uploads', fileInfo.filename)
-        const fileData = await fs.promises.readFile(filePath)
-        socket.emit('file-data', fileData, requestId)
-      } catch (error) {
-        socket.emit('file-error', { error: 'File not found', requestId })
       }
     }
   })
@@ -432,6 +497,14 @@ app.post('/upload', upload.single('file'), async (req, res) => {
 app.get('/download/:fileId', async (req, res) => {
   const { fileId } = req.params
   const fileInfo = fileRegistry.get(fileId)
+
+  console.log('Download request for:', fileId)
+  console.log('File info:', fileInfo)
+  console.log('Connected servers:', Array.from(connectedServers.entries()).map(([url, info]) => ({
+    url,
+    name: info.name,
+    connected: info.socket?.connected
+  })))
 
   if (!fileInfo) {
     return res.status(404).json({ error: 'File not found in registry' })
