@@ -2,7 +2,7 @@
 cat > ~/MeshShare/deploy.sh << 'EOF'
 #!/bin/bash
 # Build the project
-npm run build
+npm run build:prod
 
 # Copy to web directory
 sudo cp -r dist/* /var/www/meshshare/
