@@ -203,6 +203,10 @@ io.on('connection', (socket) => {
     // Send our complete file registry to the new server
     const localFiles = Array.from(fileRegistry.values())
       .filter(file => !file.sourceSocketId) // Only send our local files
+      .map(file => ({
+        ...file,
+        serverName // Ensure our server name is set
+      }))
     
     console.log(`Sending ${localFiles.length} local files to ${serverInfo.name}`)
     socket.emit('file-registry', localFiles)
@@ -215,13 +219,13 @@ io.on('connection', (socket) => {
       return
     }
 
-    const files = Array.isArray(data) ? data : (data.files ? Object.values(data.files) : [])
+    const files = Array.isArray(data) ? data : []
     console.log(`Received file registry with ${files.length} files from ${serverInfo.name}`)
-    let newFiles = 0
     
     // Clear previous files from this server
     serverInfo.files.forEach(fileId => {
-      if (fileRegistry.get(fileId)?.sourceSocketId === socket.id) {
+      const existingFile = fileRegistry.get(fileId)
+      if (existingFile?.sourceSocketId === socket.id) {
         fileRegistry.delete(fileId)
       }
     })
@@ -236,10 +240,10 @@ io.on('connection', (socket) => {
       }
       fileRegistry.set(fileInfo.fileId, updatedFileInfo)
       serverInfo.files.add(fileInfo.fileId)
-      newFiles++
     })
 
-    console.log(`Updated registry with ${newFiles} files from ${serverInfo.name}`)
+    // Save metadata after registry update
+    saveMetadata()
   })
 
   socket.on('file-available', (fileInfo) => {
@@ -254,12 +258,19 @@ io.on('connection', (socket) => {
       serverName: serverInfo.name
     }
 
+    // Update local registry
     fileRegistry.set(fileInfo.fileId, updatedFileInfo)
     serverInfo.files.add(fileInfo.fileId)
     
+    // Save metadata
+    saveMetadata()
+    
     // Propagate to other connected servers
-    socket.broadcast.emit('file-available', updatedFileInfo)
-    console.log(`Propagating new file ${fileInfo.fileId} to other servers`)
+    for (const [id, info] of connectedServers.entries()) {
+      if (id !== socket.id && info.socket?.connected) {
+        info.socket.emit('file-available', updatedFileInfo)
+      }
+    }
   })
 
   socket.on('request-file', async ({ fileId, requestId }) => {
@@ -373,7 +384,7 @@ app.post('/upload', upload.single('file'), async (req, res) => {
 
     const fileInfo = {
       fileId,
-      serverName, // Use our server name
+      serverName,
       filename: fileId,
       originalName: file.originalname,
       size: file.size,
@@ -381,10 +392,24 @@ app.post('/upload', upload.single('file'), async (req, res) => {
       uploadDate
     }
 
+    // Update local registry
     fileRegistry.set(fileId, fileInfo)
     
+    // Save metadata
+    fileMetadata.set(fileId, {
+      serverName,
+      originalName: file.originalname,
+      mimeType: file.mimetype,
+      uploadDate
+    })
+    saveMetadata()
+    
     // Notify all connected servers
-    io.emit('file-available', fileInfo)
+    for (const [_, info] of connectedServers.entries()) {
+      if (info.socket?.connected) {
+        info.socket.emit('file-available', fileInfo)
+      }
+    }
 
     res.json(fileInfo)
   } catch (error) {
