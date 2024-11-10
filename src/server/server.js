@@ -210,6 +210,13 @@ io.on('connection', (socket) => {
     
     console.log(`Sending ${localFiles.length} local files to ${serverInfo.name}`)
     socket.emit('file-registry', localFiles)
+
+    // Notify other servers about the new connection
+    for (const [id, info] of connectedServers.entries()) {
+      if (id !== socket.id && info.socket?.connected) {
+        info.socket.emit('server-joined', { name: serverInfo.name, id: socket.id })
+      }
+    }
   })
 
   socket.on('file-registry', (data) => {
@@ -240,6 +247,13 @@ io.on('connection', (socket) => {
       }
       fileRegistry.set(fileInfo.fileId, updatedFileInfo)
       serverInfo.files.add(fileInfo.fileId)
+
+      // Propagate to other servers if this is new information
+      for (const [id, info] of connectedServers.entries()) {
+        if (id !== socket.id && info.socket?.connected) {
+          info.socket.emit('file-available', updatedFileInfo)
+        }
+      }
     })
 
     // Save metadata after registry update
@@ -258,17 +272,21 @@ io.on('connection', (socket) => {
       serverName: serverInfo.name
     }
 
-    // Update local registry
-    fileRegistry.set(fileInfo.fileId, updatedFileInfo)
-    serverInfo.files.add(fileInfo.fileId)
-    
-    // Save metadata
-    saveMetadata()
-    
-    // Propagate to other connected servers
-    for (const [id, info] of connectedServers.entries()) {
-      if (id !== socket.id && info.socket?.connected) {
-        info.socket.emit('file-available', updatedFileInfo)
+    // Only update and propagate if this is new information
+    const existingFile = fileRegistry.get(fileInfo.fileId)
+    if (!existingFile || existingFile.sourceSocketId !== socket.id) {
+      // Update local registry
+      fileRegistry.set(fileInfo.fileId, updatedFileInfo)
+      serverInfo.files.add(fileInfo.fileId)
+      
+      // Save metadata
+      saveMetadata()
+      
+      // Propagate to other connected servers
+      for (const [id, info] of connectedServers.entries()) {
+        if (id !== socket.id && info.socket?.connected) {
+          info.socket.emit('file-available', updatedFileInfo)
+        }
       }
     }
   })
