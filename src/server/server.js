@@ -211,15 +211,23 @@ io.on('connection', (socket) => {
     console.log(`Sending ${localFiles.length} local files to ${serverInfo.name}`)
     socket.emit('file-registry', localFiles)
 
-    // Notify other servers about the new connection
+    // Notify other servers about the new connection and share their registries
     for (const [id, info] of connectedServers.entries()) {
       if (id !== socket.id && info.socket?.connected) {
-        info.socket.emit('server-joined', { name: serverInfo.name, id: socket.id })
+        // Notify about new server
+        info.socket.emit('server-joined', { 
+          name: serverInfo.name, 
+          id: socket.id 
+        })
+        
+        // Request their registry to share with new server
+        info.socket.emit('request-registry', { requestingServerId: socket.id })
       }
     }
   })
 
-  socket.on('file-registry', (data) => {
+  // Update file-registry handler to support forwarding
+  socket.on('file-registry', (data, requestingServerId) => {
     const serverInfo = connectedServers.get(socket.id)
     if (!serverInfo) {
       console.log('Received registry from unknown server:', socket.id)
@@ -247,20 +255,29 @@ io.on('connection', (socket) => {
       }
       fileRegistry.set(fileInfo.fileId, updatedFileInfo)
       serverInfo.files.add(fileInfo.fileId)
+    })
 
+    // If this registry was requested for another server, forward it
+    if (requestingServerId) {
+      const requestingServer = connectedServers.get(requestingServerId)
+      if (requestingServer?.socket?.connected) {
+        requestingServer.socket.emit('file-registry', files)
+      }
+    } else {
       // Propagate to other servers if this is new information
       for (const [id, info] of connectedServers.entries()) {
         if (id !== socket.id && info.socket?.connected) {
-          info.socket.emit('file-available', updatedFileInfo)
+          info.socket.emit('file-registry', files)
         }
       }
-    })
+    }
 
     // Save metadata after registry update
     saveMetadata()
   })
 
-  socket.on('file-available', (fileInfo) => {
+  // Update file-available handler to support mesh propagation
+  socket.on('file-available', (fileInfo, fromServerId) => {
     const serverInfo = connectedServers.get(socket.id)
     if (!serverInfo) return
 
@@ -282,10 +299,10 @@ io.on('connection', (socket) => {
       // Save metadata
       saveMetadata()
       
-      // Propagate to other connected servers
+      // Propagate to other connected servers (except the one we got it from)
       for (const [id, info] of connectedServers.entries()) {
-        if (id !== socket.id && info.socket?.connected) {
-          info.socket.emit('file-available', updatedFileInfo)
+        if (id !== socket.id && id !== fromServerId && info.socket?.connected) {
+          info.socket.emit('file-available', updatedFileInfo, socket.id)
         }
       }
     }
@@ -389,7 +406,7 @@ io.on('connection', (socket) => {
 // Connect to known servers on startup
 knownServers.forEach(connectToServer)
 
-// Update upload handler to just notify connected servers
+// Update upload handler to propagate through the mesh
 app.post('/upload', upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
@@ -422,10 +439,10 @@ app.post('/upload', upload.single('file'), async (req, res) => {
     })
     saveMetadata()
     
-    // Notify all connected servers
-    for (const [_, info] of connectedServers.entries()) {
+    // Notify all connected servers with mesh propagation
+    for (const [id, info] of connectedServers.entries()) {
       if (info.socket?.connected) {
-        info.socket.emit('file-available', fileInfo)
+        info.socket.emit('file-available', fileInfo, null)
       }
     }
 
