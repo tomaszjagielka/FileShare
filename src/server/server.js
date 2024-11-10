@@ -618,4 +618,11 @@ setInterval(() => {
     name: info.name,
     connected: info.socket?.connected
   })))
-}, 10000) 
+}, 10000)
+
+// Add this after the imports and before any other code
+function cleanServerUrl(url) {
+  if (!url) return ''
+  // Remove trailing slash and ensure consistent format
+  return url.trim().replace(/\/+$/, '')
+} 
