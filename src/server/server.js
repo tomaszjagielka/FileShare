@@ -368,8 +368,8 @@ app.get('/status', (req, res) => {
   res.json(status)
 })
 
-// Remove duplicate PORT declaration at the bottom and just use the listen call
-httpServer.listen(PORT, () => {
+// Change the listen call to use '0.0.0.0' instead of default localhost
+httpServer.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on port ${PORT}`)
   console.log(`Server Name: ${serverName}`)
   console.log(`Server URL: ${MY_URL}`)
