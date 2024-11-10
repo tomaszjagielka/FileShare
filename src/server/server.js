@@ -26,7 +26,13 @@ const io = new SocketServer(httpServer, {
   cors: {
     origin: "*",
     methods: ["GET", "POST"]
-  }
+  },
+  transports: ['websocket', 'polling'],
+  pingTimeout: 60000,
+  pingInterval: 25000,
+  upgradeTimeout: 10000,
+  allowUpgrades: true,
+  cookie: false
 })
 
 // Middleware setup
@@ -131,7 +137,13 @@ function connectToServer(serverUrl) {
     reconnection: true,
     reconnectionDelay: 5000,
     reconnectionAttempts: 5,
-    timeout: 10000
+    timeout: 10000,
+    transports: ['websocket', 'polling'], // Try WebSocket first, then polling
+    secure: cleanUrl.startsWith('https://'),
+    rejectUnauthorized: false, // Allow self-signed certificates
+    extraHeaders: {
+      'User-Agent': 'MeshShare-Client'
+    }
   })
 
   let reconnectAttempts = 0
@@ -140,6 +152,13 @@ function connectToServer(serverUrl) {
   socket.on('connect', () => {
     console.log(`Connected to server: ${cleanUrl}`)
     reconnectAttempts = 0 // Reset attempts on successful connection
+    
+    // Store the socket with the cleaned URL before sending registration
+    connectedServers.set(cleanUrl, {
+      socket,
+      name: undefined // Will be set when server registers
+    })
+
     socket.emit('register-server', {
       url: MY_URL,
       name: serverName
@@ -163,6 +182,19 @@ function connectToServer(serverUrl) {
     if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
       connectedServers.delete(cleanUrl)
     }
+  })
+
+  socket.io.on('error', (error) => {
+    console.error(`Socket.IO error for ${cleanUrl}:`, error.message)
+  })
+
+  socket.io.on('reconnect_attempt', (attempt) => {
+    console.log(`Reconnection attempt ${attempt} for ${cleanUrl}`)
+  })
+
+  socket.io.on('reconnect_failed', () => {
+    console.log(`Failed to reconnect to ${cleanUrl} after ${MAX_RECONNECT_ATTEMPTS} attempts`)
+    connectedServers.delete(cleanUrl)
   })
 
   socket.on('file-registry', (files) => {
@@ -254,12 +286,6 @@ function connectToServer(serverUrl) {
         requestId 
       })
     }
-  })
-
-  // Store the socket with the cleaned URL
-  connectedServers.set(cleanUrl, {
-    socket,
-    name: undefined // Will be set when server registers
   })
 
   return socket
@@ -617,6 +643,17 @@ setInterval(() => {
     url,
     name: info.name,
     connected: info.socket?.connected
+  })))
+}, 10000)
+
+// Add this near the start of the file
+setInterval(() => {
+  console.log('Connection status:', Array.from(connectedServers.entries()).map(([url, info]) => ({
+    url,
+    name: info.name,
+    connected: info.socket?.connected,
+    transport: info.socket?.io?.engine?.transport?.name,
+    state: info.socket?.io?.engine?.readyState
   })))
 }, 10000)
 
