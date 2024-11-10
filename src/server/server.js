@@ -206,22 +206,32 @@ io.on('connection', (socket) => {
   })
 
   socket.on('file-registry', (data) => {
+    const serverInfo = connectedServers.get(socket.id)
+    if (!serverInfo) return
+
     // Check if we received an array or an object with files property
     const files = Array.isArray(data) ? data : (data.files ? Object.values(data.files) : [])
-    console.log(`Received file registry with ${files.length} files`)
+    console.log(`Received file registry with ${files.length} files from ${serverInfo.name}`)
     let newFiles = 0
     
     // Update our registry with new files
     for (const fileInfo of files) {
       if (!fileRegistry.has(fileInfo.fileId)) {
-        console.log(`Adding new file to registry: ${fileInfo.fileId} from ${fileInfo.serverUrl}`)
-        fileRegistry.set(fileInfo.fileId, fileInfo)
+        const updatedFileInfo = {
+          ...fileInfo,
+          sourceSocketId: socket.id // Track which socket this file came from
+        }
+        console.log(`Adding new file to registry: ${fileInfo.fileId} from ${serverInfo.name}`)
+        fileRegistry.set(fileInfo.fileId, updatedFileInfo)
+        serverInfo.files.add(fileInfo.fileId) // Track that this server has this file
         newFiles++
       }
     }
     
     if (newFiles > 0) {
-      console.log(`Added ${newFiles} new files to registry`)
+      console.log(`Added ${newFiles} new files to registry from ${serverInfo.name}`)
+      // Propagate new files to other connected servers
+      socket.broadcast.emit('file-registry', Array.from(fileRegistry.values()))
     }
   })
 
@@ -231,11 +241,10 @@ io.on('connection', (socket) => {
 
     console.log(`Received file-available for ${fileInfo.fileId} from ${serverInfo.name}`)
     
-    // Update file info to use server name instead of URL
     const updatedFileInfo = {
       ...fileInfo,
-      serverName: serverInfo.name,
-      sourceSocketId: socket.id // Store socket ID for file requests
+      sourceSocketId: socket.id,
+      serverName: serverInfo.name // Use the actual server name that has the file
     }
 
     if (!fileRegistry.has(fileInfo.fileId)) {
@@ -244,6 +253,7 @@ io.on('connection', (socket) => {
       
       // Propagate to other connected servers
       socket.broadcast.emit('file-available', updatedFileInfo)
+      console.log(`Propagating new file ${fileInfo.fileId} to other servers`)
     }
   })
 
@@ -362,18 +372,16 @@ app.get('/download/:fileId', async (req, res) => {
   }
 
   try {
-    const cleanFileServerUrl = cleanServerUrl(fileInfo.serverUrl)
-    
-    // If file is local, serve it directly
-    if (cleanFileServerUrl === MY_URL) {
+    // If file is local (no sourceSocketId), serve it directly
+    if (!fileInfo.sourceSocketId) {
       const filePath = path.join('./uploads', fileInfo.filename)
       return res.download(filePath, fileInfo.originalName)
     }
 
     // Get the server that has the file
-    const sourceServer = connectedServers.get(cleanFileServerUrl)
+    const sourceServer = connectedServers.get(fileInfo.sourceSocketId)
     if (!sourceServer?.socket?.connected) {
-      console.error(`Source server not available: ${cleanFileServerUrl}`)
+      console.error(`Source server not available: ${fileInfo.serverName}`)
       return res.status(404).json({ error: 'Source server not available' })
     }
 
@@ -424,46 +432,43 @@ app.get('/download/:fileId', async (req, res) => {
 })
 
 app.get('/files', async (req, res) => {
-  // Create a promise that resolves when we receive registry updates
   const registryUpdates = new Promise((resolve) => {
     const newFiles = new Map(fileRegistry) // Start with current registry
     let pendingResponses = 0
     
-    // Handler for receiving registry updates
-    const handleRegistry = (data) => {
-      const files = Array.isArray(data) ? data : (data.files ? Object.values(data.files) : [])
-      files.forEach(file => {
-        if (!newFiles.has(file.fileId)) {
-          newFiles.set(file.fileId, file)
-        }
-      })
-      pendingResponses--
-      
-      if (pendingResponses <= 0) {
-        // All responses received or no connected servers
-        resolve(Array.from(newFiles.values()))
-      }
-    }
-
     // Request registry from all connected servers
-    for (const [url, info] of connectedServers.entries()) {
+    for (const [socketId, info] of connectedServers.entries()) {
       if (info.socket?.connected) {
-        console.log(`Requesting registry from ${url}`)
+        console.log(`Requesting registry from ${info.name} (${socketId})`)
         pendingResponses++
-        info.socket.once('file-registry', handleRegistry)
+        info.socket.once('file-registry', (data) => {
+          const files = Array.isArray(data) ? data : (data.files ? Object.values(data.files) : [])
+          files.forEach(file => {
+            if (!newFiles.has(file.fileId)) {
+              newFiles.set(file.fileId, {
+                ...file,
+                sourceSocketId: socketId,
+                serverName: info.name
+              })
+            }
+          })
+          pendingResponses--
+          
+          if (pendingResponses <= 0) {
+            resolve(Array.from(newFiles.values()))
+          }
+        })
         info.socket.emit('request-registry')
       }
     }
 
-    // If no connected servers, resolve immediately
     if (pendingResponses === 0) {
       resolve(Array.from(newFiles.values()))
     }
 
-    // Timeout after 5 seconds
     setTimeout(() => {
       resolve(Array.from(newFiles.values()))
-    }, 10000)
+    }, 5000)
   })
 
   try {
@@ -471,7 +476,6 @@ app.get('/files', async (req, res) => {
     res.json(files)
   } catch (error) {
     console.error('Error fetching files:', error)
-    // Return current known files if there's an error
     res.json(Array.from(fileRegistry.values()))
   }
 })
