@@ -81,10 +81,14 @@ const saveMetadata = () => {
   }
 }
 
-// Server registry and file registry
-const connectedServers = new Map() // serverUrl -> socket
-const fileRegistry = new Map() // fileId -> { serverUrl, filename, size }
-const MY_URL = cleanServerUrl(process.env.SERVER_URL || 'http://localhost:3001')
+// Generate a unique server identifier
+const macAddress = getMacAddress()
+const username = getUsername()
+const serverName = `${username}@${macAddress.slice(-6)}:${PORT}`
+
+// Replace connectedServers Map to use socket IDs instead of URLs
+const connectedServers = new Map() // socketId -> { socket, name, files }
+const fileRegistry = new Map() // fileId -> { fileId, serverName, filename, etc }
 
 // Known server list (could be loaded from config or environment)
 const knownServers = (process.env.KNOWN_SERVERS || '').split(',').filter(Boolean)
@@ -113,25 +117,23 @@ function getUsername() {
   return process.env.USER || process.env.USERNAME || os.userInfo().username || 'unknown'
 }
 
-// Generate a unique server identifier
-const macAddress = getMacAddress()
-const username = getUsername()
-const serverName = `${username}@${macAddress.slice(-6)}:${PORT}` // Use the PORT constant
-
 // Connect to known servers
 function connectToServer(serverUrl) {
   if (!serverUrl) return
   const cleanUrl = cleanServerUrl(serverUrl)
   if (cleanUrl === MY_URL) return
   
+  console.log(`Attempting to connect to server: ${cleanUrl}`)
+  
+  // Check if we already have a working connection
   if (connectedServers.has(cleanUrl)) {
     const existingConnection = connectedServers.get(cleanUrl)
     if (existingConnection.socket?.connected) {
+      console.log(`Already connected to ${cleanUrl}`)
       return existingConnection.socket
     }
   }
-  
-  console.log(`Attempting to connect to server: ${cleanUrl}`)
+
   const socket = SocketClient(cleanUrl, {
     reconnection: true,
     reconnectionDelay: 5000,
@@ -145,12 +147,8 @@ function connectToServer(serverUrl) {
 
   socket.on('connect', () => {
     console.log(`Connected to server: ${cleanUrl}`)
-    connectedServers.set(cleanUrl, {
-      socket,
-      name: undefined
-    })
-
-    // Send our info immediately on connection
+    
+    // Send our public URL, not localhost
     socket.emit('register-server', {
       url: MY_URL,
       name: serverName
@@ -168,12 +166,12 @@ io.on('connection', (socket) => {
   console.log('New connection:', socket.id)
 
   socket.on('register-server', (serverInfo) => {
-    const cleanUrl = cleanServerUrl(serverInfo.url)
-    console.log(`Server registered: ${serverInfo.name} (${cleanUrl})`)
+    console.log(`Server registered: ${serverInfo.name} (${socket.id})`)
     
-    connectedServers.set(cleanUrl, {
+    connectedServers.set(socket.id, {
       socket,
-      name: serverInfo.name
+      name: serverInfo.name,
+      files: new Set() // Track files available on this server
     })
 
     // Send our complete file registry to the new server
@@ -202,89 +200,53 @@ io.on('connection', (socket) => {
   })
 
   socket.on('file-available', (fileInfo) => {
-    console.log(`Received file-available for ${fileInfo.fileId} from ${fileInfo.serverUrl}`)
+    const serverInfo = connectedServers.get(socket.id)
+    if (!serverInfo) return
+
+    console.log(`Received file-available for ${fileInfo.fileId} from ${serverInfo.name}`)
+    
+    // Update file info to use server name instead of URL
+    const updatedFileInfo = {
+      ...fileInfo,
+      serverName: serverInfo.name,
+      sourceSocketId: socket.id // Store socket ID for file requests
+    }
+
     if (!fileRegistry.has(fileInfo.fileId)) {
-      console.log(`Adding new file to registry: ${fileInfo.fileId}`)
-      fileRegistry.set(fileInfo.fileId, fileInfo)
+      fileRegistry.set(fileInfo.fileId, updatedFileInfo)
+      serverInfo.files.add(fileInfo.fileId)
       
       // Propagate to other connected servers
-      for (const [_, info] of connectedServers.entries()) {
-        if (info.socket?.connected && info.socket.id !== socket.id) {
-          console.log(`Propagating file ${fileInfo.fileId} to other server`)
-          info.socket.emit('file-available', fileInfo)
-        }
-      }
+      socket.broadcast.emit('file-available', updatedFileInfo)
     }
   })
 
   socket.on('request-file', async ({ fileId, requestId }) => {
-    console.log(`File request received for ${fileId} with requestId ${requestId}`)
     const fileInfo = fileRegistry.get(fileId)
-    
     if (!fileInfo) {
-      socket.emit('file-error', { 
-        error: 'File not found in registry', 
-        requestId 
-      })
+      socket.emit('file-error', { error: 'File not found', requestId })
       return
     }
 
     try {
-      if (fileInfo.serverUrl === MY_URL) {
-        console.log(`Serving local file: ${fileId}`)
+      // Check if we have the file locally
+      if (fileInfo.sourceSocketId === undefined) { // Local file
         const filePath = path.join('./uploads', fileInfo.filename)
         const fileData = await fs.promises.readFile(filePath)
         socket.emit('file-data', fileData, requestId)
       } else {
-        const sourceServer = connectedServers.get(cleanServerUrl(fileInfo.serverUrl))
+        // Get the server that has the file
+        const sourceServer = connectedServers.get(fileInfo.sourceSocketId)
         if (!sourceServer?.socket?.connected) {
-          socket.emit('file-error', { 
-            error: 'Source server not available', 
-            requestId 
-          })
+          socket.emit('file-error', { error: 'Source server not available', requestId })
           return
         }
 
-        console.log(`Forwarding file request to ${fileInfo.serverUrl}`)
-        const fileData = await new Promise((resolve, reject) => {
-          const cleanup = () => {
-            sourceServer.socket.off('file-data', handleData)
-            sourceServer.socket.off('file-error', handleError)
-            clearTimeout(timeoutId)
-          }
-
-          const handleData = (data, respId) => {
-            if (respId === requestId) {
-              cleanup()
-              resolve(data)
-            }
-          }
-
-          const handleError = (error, respId) => {
-            if (respId === requestId) {
-              cleanup()
-              reject(new Error(error.message || 'Failed to fetch file'))
-            }
-          }
-
-          sourceServer.socket.on('file-data', handleData)
-          sourceServer.socket.on('file-error', handleError)
-          sourceServer.socket.emit('request-file', { fileId, requestId })
-
-          const timeoutId = setTimeout(() => {
-            cleanup()
-            reject(new Error('Request timed out'))
-          }, 30000)
-        })
-
-        socket.emit('file-data', fileData, requestId)
+        // Forward the request
+        sourceServer.socket.emit('request-file', { fileId, requestId })
       }
     } catch (error) {
-      console.error(`Error serving file ${fileId}:`, error)
-      socket.emit('file-error', { 
-        error: error.message || 'Failed to fetch file', 
-        requestId 
-      })
+      socket.emit('file-error', { error: error.message, requestId })
     }
   })
 
@@ -308,14 +270,14 @@ io.on('connection', (socket) => {
 
   // Add disconnect handler
   socket.on('disconnect', () => {
-    console.log(`Client disconnected: ${socket.id}`)
-    // Clean up disconnected server from our registry
-    for (const [url, info] of connectedServers.entries()) {
-      if (info.socket.id === socket.id) {
-        console.log(`Removing disconnected server: ${url}`)
-        connectedServers.delete(url)
-        break
-      }
+    const serverInfo = connectedServers.get(socket.id)
+    if (serverInfo) {
+      console.log(`Server disconnected: ${serverInfo.name}`)
+      // Remove files from registry that were from this server
+      serverInfo.files.forEach(fileId => {
+        fileRegistry.delete(fileId)
+      })
+      connectedServers.delete(socket.id)
     }
   })
 
@@ -372,42 +334,24 @@ app.post('/upload', upload.single('file'), async (req, res) => {
     const uploadDate = new Date().toISOString()
 
     const fileInfo = {
-      fileId: fileId,
-      serverUrl: MY_URL,
-      serverName: serverName,
+      fileId,
+      serverName, // Use our server name
       filename: fileId,
       originalName: file.originalname,
       size: file.size,
       mimeType: file.mimetype,
-      uploadDate: uploadDate
+      uploadDate
     }
 
-    // Store metadata
-    fileMetadata.set(fileId, {
-      originalName: file.originalname,
-      uploadDate: uploadDate,
-      serverName: serverName,
-      mimeType: file.mimetype
-    })
-    saveMetadata()
-
-    // Add to local registry
     fileRegistry.set(fileId, fileInfo)
-
-    // Notify connected servers
-    for (const [_, info] of connectedServers.entries()) {
-      if (info.socket?.connected) {
-        info.socket.emit('file-available', fileInfo)
-      }
-    }
+    
+    // Notify all connected servers
+    io.emit('file-available', fileInfo)
 
     res.json(fileInfo)
   } catch (error) {
     console.error('Upload error:', error)
-    res.status(500).json({ 
-      error: 'File upload failed',
-      details: error.message 
-    })
+    res.status(500).json({ error: 'Upload failed', details: error.message })
   }
 })
 
@@ -540,13 +484,12 @@ app.get('/files', async (req, res) => {
 // Add a new endpoint to get server status
 app.get('/status', (req, res) => {
   const status = {
-    serverUrl: MY_URL,
-    serverName: serverName,
-    connectedServers: Array.from(connectedServers.entries())
-      .filter(([_, info]) => info.socket?.connected) // Only include connected servers
-      .map(([url, info]) => ({
-        url,
-        name: info.name || `${url} (Unknown)`
+    serverName,
+    connectedServers: Array.from(connectedServers.values())
+      .filter(info => info.socket?.connected)
+      .map(info => ({
+        name: info.name,
+        files: info.files.size
       })),
     totalFiles: fileRegistry.size
   }
