@@ -181,7 +181,9 @@ io.on('connection', (socket) => {
     socket.emit('file-registry', Array.from(fileRegistry.values()))
   })
 
-  socket.on('file-registry', (files) => {
+  socket.on('file-registry', (data) => {
+    // Check if we received an array or an object with files property
+    const files = Array.isArray(data) ? data : (data.files ? Object.values(data.files) : [])
     console.log(`Received file registry with ${files.length} files`)
     let newFiles = 0
     
@@ -289,12 +291,8 @@ io.on('connection', (socket) => {
   socket.on('refresh-registry', ({ source, propagateId }) => {
     console.log(`Registry refresh requested by ${source}`)
     
-    // Send our complete registry back
-    socket.emit('file-registry', {
-      files: Object.fromEntries(fileRegistry),
-      source: MY_URL,
-      propagateId
-    })
+    // Send our complete registry back - fix the format to match what the handler expects
+    socket.emit('file-registry', Array.from(fileRegistry.values()))
 
     // Propagate refresh request to other servers
     for (const [url, info] of connectedServers.entries()) {
@@ -485,6 +483,7 @@ app.get('/files', (req, res) => {
   for (const [url, info] of connectedServers.entries()) {
     if (info.socket?.connected) {
       console.log(`Requesting registry from ${url}`)
+      // Send in array format
       info.socket.emit('file-registry', Array.from(fileRegistry.values()))
     }
   }
