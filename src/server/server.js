@@ -197,42 +197,49 @@ io.on('connection', (socket) => {
     connectedServers.set(socket.id, {
       socket,
       name: serverInfo.name,
-      files: new Set() // Track files available on this server
+      files: new Set()
     })
 
     // Send our complete file registry to the new server
-    console.log(`Sending file registry (${fileRegistry.size} files) to ${serverInfo.name}`)
-    socket.emit('file-registry', Array.from(fileRegistry.values()))
+    const localFiles = Array.from(fileRegistry.values())
+      .filter(file => !file.sourceSocketId) // Only send our local files
+    
+    console.log(`Sending ${localFiles.length} local files to ${serverInfo.name}`)
+    socket.emit('file-registry', localFiles)
   })
 
   socket.on('file-registry', (data) => {
     const serverInfo = connectedServers.get(socket.id)
-    if (!serverInfo) return
+    if (!serverInfo) {
+      console.log('Received registry from unknown server:', socket.id)
+      return
+    }
 
-    // Check if we received an array or an object with files property
     const files = Array.isArray(data) ? data : (data.files ? Object.values(data.files) : [])
     console.log(`Received file registry with ${files.length} files from ${serverInfo.name}`)
     let newFiles = 0
     
-    // Update our registry with new files
-    for (const fileInfo of files) {
-      if (!fileRegistry.has(fileInfo.fileId)) {
-        const updatedFileInfo = {
-          ...fileInfo,
-          sourceSocketId: socket.id // Track which socket this file came from
-        }
-        console.log(`Adding new file to registry: ${fileInfo.fileId} from ${serverInfo.name}`)
-        fileRegistry.set(fileInfo.fileId, updatedFileInfo)
-        serverInfo.files.add(fileInfo.fileId) // Track that this server has this file
-        newFiles++
+    // Clear previous files from this server
+    serverInfo.files.forEach(fileId => {
+      if (fileRegistry.get(fileId)?.sourceSocketId === socket.id) {
+        fileRegistry.delete(fileId)
       }
-    }
-    
-    if (newFiles > 0) {
-      console.log(`Added ${newFiles} new files to registry from ${serverInfo.name}`)
-      // Propagate new files to other connected servers
-      socket.broadcast.emit('file-registry', Array.from(fileRegistry.values()))
-    }
+    })
+    serverInfo.files.clear()
+
+    // Update our registry with new files
+    files.forEach(fileInfo => {
+      const updatedFileInfo = {
+        ...fileInfo,
+        sourceSocketId: socket.id,
+        serverName: serverInfo.name
+      }
+      fileRegistry.set(fileInfo.fileId, updatedFileInfo)
+      serverInfo.files.add(fileInfo.fileId)
+      newFiles++
+    })
+
+    console.log(`Updated registry with ${newFiles} files from ${serverInfo.name}`)
   })
 
   socket.on('file-available', (fileInfo) => {
@@ -244,45 +251,71 @@ io.on('connection', (socket) => {
     const updatedFileInfo = {
       ...fileInfo,
       sourceSocketId: socket.id,
-      serverName: serverInfo.name // Use the actual server name that has the file
+      serverName: serverInfo.name
     }
 
-    if (!fileRegistry.has(fileInfo.fileId)) {
-      fileRegistry.set(fileInfo.fileId, updatedFileInfo)
-      serverInfo.files.add(fileInfo.fileId)
-      
-      // Propagate to other connected servers
-      socket.broadcast.emit('file-available', updatedFileInfo)
-      console.log(`Propagating new file ${fileInfo.fileId} to other servers`)
-    }
+    fileRegistry.set(fileInfo.fileId, updatedFileInfo)
+    serverInfo.files.add(fileInfo.fileId)
+    
+    // Propagate to other connected servers
+    socket.broadcast.emit('file-available', updatedFileInfo)
+    console.log(`Propagating new file ${fileInfo.fileId} to other servers`)
   })
 
   socket.on('request-file', async ({ fileId, requestId }) => {
+    console.log(`File request received for ${fileId} (${requestId})`)
     const fileInfo = fileRegistry.get(fileId)
+    
     if (!fileInfo) {
-      socket.emit('file-error', { error: 'File not found', requestId })
+      console.log(`File not found: ${fileId}`)
+      socket.emit('file-error', { message: 'File not found', requestId })
       return
     }
 
     try {
-      // Check if we have the file locally
-      if (fileInfo.sourceSocketId === undefined) { // Local file
+      // If we have the file locally
+      if (!fileInfo.sourceSocketId) {
+        console.log(`Serving local file: ${fileId}`)
         const filePath = path.join('./uploads', fileInfo.filename)
         const fileData = await fs.promises.readFile(filePath)
         socket.emit('file-data', fileData, requestId)
-      } else {
-        // Get the server that has the file
-        const sourceServer = connectedServers.get(fileInfo.sourceSocketId)
-        if (!sourceServer?.socket?.connected) {
-          socket.emit('file-error', { error: 'Source server not available', requestId })
-          return
-        }
-
-        // Forward the request
-        sourceServer.socket.emit('request-file', { fileId, requestId })
+        return
       }
+
+      // If we're not the source server, relay the request
+      console.log(`Relaying file request to source server: ${fileInfo.serverName}`)
+      const sourceServer = connectedServers.get(fileInfo.sourceSocketId)
+      if (!sourceServer?.socket?.connected) {
+        socket.emit('file-error', { message: 'Source server not available', requestId })
+        return
+      }
+
+      // Set up relay handlers
+      const handleData = (data, respId) => {
+        if (respId === requestId) {
+          socket.emit('file-data', data, requestId)
+          cleanup()
+        }
+      }
+
+      const handleError = (error, respId) => {
+        if (respId === requestId) {
+          socket.emit('file-error', error, requestId)
+          cleanup()
+        }
+      }
+
+      const cleanup = () => {
+        sourceServer.socket.off('file-data', handleData)
+        sourceServer.socket.off('file-error', handleError)
+      }
+
+      sourceServer.socket.on('file-data', handleData)
+      sourceServer.socket.on('file-error', handleError)
+      sourceServer.socket.emit('request-file', { fileId, requestId })
     } catch (error) {
-      socket.emit('file-error', { error: error.message, requestId })
+      console.error('Error handling file request:', error)
+      socket.emit('file-error', { message: error.message, requestId })
     }
   })
 
