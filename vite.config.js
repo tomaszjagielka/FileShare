@@ -2,18 +2,12 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
 // https://vitejs.dev/config/
-export default defineConfig(({ mode }) => {
-  // Use different ports for different modes
-  const port = mode === 'server1' ? 5173 : mode === 'server2' ? 5174 : 5173
-  const serverUrl = mode === 'server1' ? 'http://localhost:3001' : 'http://localhost:3002'
-
-  return {
-    plugins: [react()],
-    server: {
-      port,
-    },
-    define: {
-      'process.env.SERVER_URL': JSON.stringify(serverUrl)
-    }
+export default defineConfig({
+  plugins: [react()],
+  server: {
+    port: 5173,
+  },
+  define: {
+    'process.env.SERVER_URL': JSON.stringify('http://localhost:3001')
   }
 })

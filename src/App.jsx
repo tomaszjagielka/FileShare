@@ -8,7 +8,7 @@ function App() {
   const [files, setFiles] = useState([])
   const [status, setStatus] = useState(null)
   const [selectedServer, setSelectedServer] = useState(process.env.SERVER_URL || 'http://localhost:3000')
-  const serverUrl = process.env.SERVER_URL || 'http://localhost:3000'
+  const serverUrl = import.meta.env.VITE_SERVER_URL || 'http://localhost:3001'
 
   const fetchFiles = async () => {
     try {
