@@ -194,14 +194,67 @@ function connectToServer(serverUrl) {
 
   socket.on('request-file', async ({ fileId, requestId }) => {
     const fileInfo = fileRegistry.get(fileId)
-    if (fileInfo && fileInfo.serverUrl === MY_URL) {
+    if (fileInfo) {
       try {
-        const filePath = path.join('./uploads', fileInfo.filename)
-        const fileData = await fs.promises.readFile(filePath)
-        socket.emit('file-data', fileData, requestId)
+        // If we have the file locally, send it
+        if (fileInfo.serverUrl === MY_URL) {
+          const filePath = path.join('./uploads', fileInfo.filename)
+          const fileData = await fs.promises.readFile(filePath)
+          socket.emit('file-data', fileData, requestId)
+        } 
+        // If we know another server has it, proxy the request
+        else {
+          const sourceServer = connectedServers.get(fileInfo.serverUrl)
+          if (sourceServer?.socket) {
+            // Create a promise to wait for the response
+            const fileData = await new Promise((resolve, reject) => {
+              const handleData = (data, respId) => {
+                if (respId === requestId) {
+                  sourceServer.socket.off('file-data', handleData)
+                  sourceServer.socket.off('file-error', handleError)
+                  resolve(data)
+                }
+              }
+
+              const handleError = (error, respId) => {
+                if (respId === requestId) {
+                  sourceServer.socket.off('file-data', handleData)
+                  sourceServer.socket.off('file-error', handleError)
+                  reject(error)
+                }
+              }
+
+              sourceServer.socket.on('file-data', handleData)
+              sourceServer.socket.on('file-error', handleError)
+              sourceServer.socket.emit('request-file', { fileId, requestId })
+
+              // Set timeout
+              setTimeout(() => {
+                sourceServer.socket.off('file-data', handleData)
+                sourceServer.socket.off('file-error', handleError)
+                reject(new Error('Request timed out'))
+              }, 30000)
+            })
+
+            socket.emit('file-data', fileData, requestId)
+          } else {
+            socket.emit('file-error', { 
+              error: 'Source server not available', 
+              requestId 
+            })
+          }
+        }
       } catch (error) {
-        socket.emit('file-error', { error: 'File not found', requestId })
+        socket.emit('file-error', { 
+          error: error.message || 'Failed to fetch file', 
+          requestId 
+        })
       }
+    } else {
+      socket.emit('file-error', { 
+        error: 'File not found in registry', 
+        requestId 
+      })
     }
   })
 
@@ -381,64 +434,58 @@ app.get('/download/:fileId', async (req, res) => {
   const fileInfo = fileRegistry.get(fileId)
 
   if (!fileInfo) {
-    return res.status(404).json({ error: 'File not found' })
-  }
-
-  // If file is local, serve it directly
-  if (fileInfo.serverUrl === MY_URL) {
-    const filePath = path.join('./uploads', fileInfo.filename)
-    return res.download(filePath, fileInfo.originalName)
-  }
-
-  // If file is on another server, proxy the request
-  const serverInfo = connectedServers.get(fileInfo.serverUrl)
-  if (!serverInfo || !serverInfo.socket) {
-    console.error(`Server not available: ${fileInfo.serverUrl}`)
-    console.debug('Connected servers:', Array.from(connectedServers.keys()))
-    return res.status(404).json({ error: 'Server not available' })
+    return res.status(404).json({ error: 'File not found in registry' })
   }
 
   try {
+    // If file is local, serve it directly
+    if (fileInfo.serverUrl === MY_URL) {
+      const filePath = path.join('./uploads', fileInfo.filename)
+      return res.download(filePath, fileInfo.originalName)
+    }
+
+    // Get the server that has the file
+    const sourceServer = connectedServers.get(fileInfo.serverUrl)
+    if (!sourceServer?.socket) {
+      console.error(`Source server not available: ${fileInfo.serverUrl}`)
+      console.debug('Connected servers:', Array.from(connectedServers.keys()))
+      return res.status(404).json({ error: 'Source server not available' })
+    }
+
     // Generate a unique request ID
     const requestId = uuidv4()
     
-    // Create a promise that will resolve when we get the file data
-    const fileDataPromise = new Promise((resolve, reject) => {
+    // Request file from the source server
+    const fileData = await new Promise((resolve, reject) => {
       const cleanup = () => {
-        serverInfo.socket.off('file-data', handleFileData)
-        serverInfo.socket.off('file-error', handleFileError)
+        sourceServer.socket.off('file-data', handleData)
+        sourceServer.socket.off('file-error', handleError)
+        clearTimeout(timeoutId)
       }
 
-      const handleFileData = (data, responseId) => {
-        if (responseId === requestId) {
+      const handleData = (data, respId) => {
+        if (respId === requestId) {
           cleanup()
           resolve(data)
         }
       }
 
-      const handleFileError = (error, responseId) => {
-        if (responseId === requestId) {
+      const handleError = (error, respId) => {
+        if (respId === requestId) {
           cleanup()
           reject(new Error(error.message || 'Failed to fetch file'))
         }
       }
 
-      // Set up handlers for the response
-      serverInfo.socket.on('file-data', handleFileData)
-      serverInfo.socket.on('file-error', handleFileError)
+      sourceServer.socket.on('file-data', handleData)
+      sourceServer.socket.on('file-error', handleError)
+      sourceServer.socket.emit('request-file', { fileId, requestId })
 
-      // Set a timeout
-      const timeout = setTimeout(() => {
+      const timeoutId = setTimeout(() => {
         cleanup()
         reject(new Error('Request timed out'))
       }, 30000)
     })
-
-    // Request file from the other server
-    serverInfo.socket.emit('request-file', { fileId, requestId })
-
-    // Wait for the response
-    const fileData = await fileDataPromise
 
     // Send the file to the client
     res.set('Content-Type', fileInfo.mimeType)
