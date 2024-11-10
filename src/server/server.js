@@ -182,7 +182,13 @@ io.on('connection', (socket) => {
       name: serverInfo.name
     })
 
+    // Send our registry to the new server
+    console.log(`Sending our file registry to ${serverInfo.name}`)
     socket.emit('file-registry', Object.fromEntries(fileRegistry))
+
+    // Request their registry as well
+    console.log(`Requesting file registry from ${serverInfo.name}`)
+    socket.emit('request-registry')
   })
 
   socket.on('file-available', (fileInfo) => {
@@ -267,10 +273,16 @@ io.on('connection', (socket) => {
 
   socket.on('file-registry', (files) => {
     console.log(`Received file registry with ${Object.keys(files).length} files`)
+    let newFiles = 0
     for (const [fileId, fileInfo] of Object.entries(files)) {
       if (!fileRegistry.has(fileId)) {
+        console.log(`Adding new file to registry: ${fileId} from ${fileInfo.serverUrl}`)
         fileRegistry.set(fileId, fileInfo)
+        newFiles++
       }
+    }
+    if (newFiles > 0) {
+      console.log(`Added ${newFiles} new files to registry`)
     }
   })
 })
