@@ -1,3 +1,5 @@
+/* Application entry point - sets up React and imports global styles. */
+
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles/base/reset.css";

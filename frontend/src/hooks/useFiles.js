@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
 import * as api from "../services/api";
 
+/* Files hook - manages file list state and periodic refresh functionality. */
+
 export const useFiles = (refreshInterval = 5000) => {
   const [files, setFiles] = useState([]);
   const [isLoading, setIsLoading] = useState(true);

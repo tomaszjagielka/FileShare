@@ -1,3 +1,5 @@
+/* API service - handles all HTTP requests to the backend server. */
+
 const API_BASE_URL = import.meta.env.VITE_SERVER_URL || "http://localhost:3001";
 
 export const fetchFiles = async () => {

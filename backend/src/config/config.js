@@ -3,6 +3,8 @@ import path from "path";
 
 dotenv.config();
 
+/* Configuration - centralizes environment variables and app settings. */
+
 export const config = {
   port: process.env.PORT || 3001,
   uploadsDir: process.env.UPLOAD_DIR || "./uploads",

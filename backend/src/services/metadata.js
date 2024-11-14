@@ -1,6 +1,8 @@
 import fs from "fs/promises";
 import { metadataPath } from "../config/config.js";
 
+/* Metadata service - handles file metadata persistence and retrieval. */
+
 class MetadataService {
   #metadata = new Map();
 

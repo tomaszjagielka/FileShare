@@ -1,6 +1,8 @@
 import { useState } from "react";
 import * as api from "../services/api";
 
+// File upload hook - handles file upload state and API interaction.
+
 export const useFileUpload = (onSuccess) => {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState(null);

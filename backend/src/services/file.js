@@ -2,6 +2,8 @@ import fs from "fs/promises";
 import path from "path";
 import { config } from "../config/config.js";
 
+/* File service - manages file operations and maintains the file registry. */
+
 class FileService {
   #fileRegistry = new Map();
 

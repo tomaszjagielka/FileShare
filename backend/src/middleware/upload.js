@@ -2,6 +2,8 @@ import multer from "multer";
 import { v4 as uuidv4 } from "uuid";
 import { config } from "../config/config.js";
 
+/* Upload middleware - configures multer for handling file uploads. */
+
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, config.uploadsDir);

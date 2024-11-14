@@ -5,6 +5,8 @@ import { metadataService } from "../services/metadata.js";
 import { upload } from "../middleware/upload.js";
 import { config } from "../config/config.js";
 
+/* File routes - defines API endpoints for file operations. */
+
 const router = Router();
 
 router.post("/upload", upload.single("file"), async (req, res) => {

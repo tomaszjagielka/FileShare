@@ -1,3 +1,5 @@
+/* Main application component - orchestrates file upload, listing and overall layout. */
+
 import { Header } from "./components/layout/Header";
 import { FileUpload } from "./components/file/FileUpload";
 import { FileList } from "./components/file/FileList";
