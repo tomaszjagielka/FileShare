@@ -187,7 +187,7 @@ const scanExistingFiles = () => {
   }
 }
 
-// Socket.IO connection handling
+// Add registry request/response handlers to Socket.IO connection
 io.on('connection', (socket) => {
   console.log('New connection:', socket.id)
 
@@ -198,6 +198,36 @@ io.on('connection', (socket) => {
       socket,
       name: serverInfo.name
     })
+
+    // Send our file registry to the newly connected server
+    socket.emit('registry-update', Array.from(fileRegistry.values()))
+  })
+
+  // Handle registry requests
+  socket.on('request-registry', () => {
+    console.log(`Registry requested by ${socket.id}`)
+    socket.emit('registry-update', Array.from(fileRegistry.values()))
+  })
+
+  // Handle registry updates from other servers
+  socket.on('registry-update', (files) => {
+    const serverInfo = connectedServers.get(socket.id)
+    if (!serverInfo) return
+
+    console.log(`Received registry update from ${serverInfo.name} with ${files.length} files`)
+    
+    // Update our registry with remote files
+    files.forEach(file => {
+      // Only add files that don't exist locally
+      if (!fileRegistry.has(file.fileId)) {
+        fileRegistry.set(file.fileId, {
+          ...file,
+          isRemote: true,
+          sourceServer: serverInfo.name,
+          sourceSocket: socket.id
+        })
+      }
+    })
   })
 
   // Add disconnect handler
@@ -205,6 +235,14 @@ io.on('connection', (socket) => {
     const serverInfo = connectedServers.get(socket.id)
     if (serverInfo) {
       console.log(`Server disconnected: ${serverInfo.name}`)
+      
+      // Remove files from disconnected server
+      for (const [fileId, file] of fileRegistry.entries()) {
+        if (file.isRemote && file.sourceSocket === socket.id) {
+          fileRegistry.delete(fileId)
+        }
+      }
+      
       connectedServers.delete(socket.id)
     }
   })
@@ -258,7 +296,7 @@ app.get('/files', async (req, res) => {
   res.json(Array.from(fileRegistry.values()))
 })
 
-// Update download endpoint to only serve local files
+// Update download endpoint to handle remote files
 app.get('/download/:fileId', async (req, res) => {
   const { fileId } = req.params
   const fileInfo = fileRegistry.get(fileId)
@@ -271,8 +309,41 @@ app.get('/download/:fileId', async (req, res) => {
   }
 
   try {
-    const filePath = path.join('./uploads', fileInfo.filename)
-    return res.download(filePath, fileInfo.originalName)
+    if (fileInfo.isRemote) {
+      // Forward download request to source server
+      const sourceServer = connectedServers.get(fileInfo.sourceSocket)
+      if (!sourceServer || !sourceServer.socket.connected) {
+        fileRegistry.delete(fileId) // Clean up stale entry
+        return res.status(404).json({ error: 'Source server not available' })
+      }
+
+      // Request file from source server
+      sourceServer.socket.emit('file-request', fileId)
+      
+      // Set up one-time handler for file response
+      sourceServer.socket.once(`file-response:${fileId}`, (fileData) => {
+        if (!fileData || fileData.error) {
+          return res.status(404).json({ error: 'File not available' })
+        }
+        
+        // Stream the file data to the client
+        res.setHeader('Content-Type', fileInfo.mimeType)
+        res.setHeader('Content-Disposition', `attachment; filename="${fileInfo.originalName}"`)
+        res.send(fileData.buffer)
+      })
+
+      // Set timeout for response
+      setTimeout(() => {
+        sourceServer.socket.off(`file-response:${fileId}`)
+        if (!res.headersSent) {
+          res.status(504).json({ error: 'Download request timed out' })
+        }
+      }, 30000)
+    } else {
+      // Serve local file
+      const filePath = path.join('./uploads', fileInfo.filename)
+      return res.download(filePath, fileInfo.originalName)
+    }
   } catch (error) {
     console.error('Error downloading file:', error)
     res.status(500).json({ 
@@ -321,4 +392,26 @@ function cleanServerUrl(url) {
   if (!url) return ''
   // Remove trailing slash and ensure consistent format
   return url.trim().replace(/\/+$/, '')
-} 
+}
+
+// Add file request handler to socket connection
+io.on('connection', (socket) => {
+  // ... existing connection handlers ...
+
+  socket.on('file-request', async (fileId) => {
+    const fileInfo = fileRegistry.get(fileId)
+    if (!fileInfo || fileInfo.isRemote) {
+      socket.emit(`file-response:${fileId}`, { error: 'File not found' })
+      return
+    }
+
+    try {
+      const filePath = path.join('./uploads', fileInfo.filename)
+      const buffer = await fs.promises.readFile(filePath)
+      socket.emit(`file-response:${fileId}`, { buffer })
+    } catch (error) {
+      console.error('Error reading file:', error)
+      socket.emit(`file-response:${fileId}`, { error: 'Failed to read file' })
+    }
+  })
+})
