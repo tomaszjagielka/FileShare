@@ -1,9 +1,6 @@
 import express from 'express'
 import cors from 'cors'
 import multer from 'multer'
-import { createServer } from 'http'
-import { Server as SocketServer } from 'socket.io'
-import { io as SocketClient } from 'socket.io-client'
 import path from 'path'
 import { v4 as uuidv4 } from 'uuid'
 import dotenv from 'dotenv'
@@ -21,19 +18,6 @@ if (!fs.existsSync(uploadsDir)) {
 }
 
 const app = express()
-const httpServer = createServer(app)
-const io = new SocketServer(httpServer, {
-  cors: {
-    origin: "*",
-    methods: ["GET", "POST"]
-  },
-  transports: ['websocket', 'polling'],
-  pingTimeout: 60000,
-  pingInterval: 25000,
-  upgradeTimeout: 10000,
-  allowUpgrades: true,
-  cookie: false
-})
 
 // Middleware setup
 app.use(cors({
@@ -81,83 +65,15 @@ const saveMetadata = () => {
   }
 }
 
-// Move these declarations to the top, right after the imports
 const PORT = process.env.PORT || 3001
-const knownServers = (process.env.KNOWN_SERVERS || '').split(',').filter(Boolean)
+const fileRegistry = new Map() // fileId -> { fileId, filename, etc }
 
-// Function to get MAC address (keep this before serverName declaration)
-function getMacAddress() {
-  const interfaces = networkInterfaces()
-  for (const interfaceName of Object.keys(interfaces)) {
-    const networkInterface = interfaces[interfaceName]
-    if (!networkInterface) continue
-    
-    for (const interface_ of networkInterface) {
-      if (!interface_.internal && interface_.family === 'IPv4') {
-        return interface_.mac.replace(/:/g, '')
-      }
-    }
-  }
-  return 'unknown'
-}
-
-// Function to get username (keep this before serverName declaration)
-function getUsername() {
-  return process.env.USER || process.env.USERNAME || os.userInfo().username || 'unknown'
-}
-
-// Generate server identifiers
-const macAddress = getMacAddress()
-const username = getUsername()
-const serverName = `${username}@${macAddress.slice(-6)}:${PORT}`
-
-// Replace connectedServers Map to use socket IDs instead of URLs
-const connectedServers = new Map() // socketId -> { socket, name }
-const fileRegistry = new Map() // fileId -> { fileId, serverName, filename, etc }
-
-// Update connectToServer function to remove URL dependencies
-function connectToServer(serverUrl) {
-  if (!serverUrl) return
-  
-  console.log(`Attempting to connect to server: ${serverUrl}`)
-  
-  const socket = SocketClient(serverUrl, {
-    reconnection: true,
-    reconnectionDelay: 5000,
-    reconnectionAttempts: 5,
-    timeout: 10000,
-    transports: ['websocket', 'polling'],
-    forceNew: true,
-    secure: serverUrl.startsWith('https://'),
-    rejectUnauthorized: false
-  })
-
-  socket.on('connect', () => {
-    console.log(`Connected to server: ${serverUrl}`)
-    
-    // Send only our server name
-    socket.emit('register-server', {
-      name: serverName
-    })
-
-    // Then request their registry
-    socket.emit('request-registry')
-  })
-
-  return socket
-}
-
-// Update the server startup log
-httpServer.listen(PORT, '0.0.0.0', () => {
+// Start the server
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on port ${PORT}`)
-  console.log(`Server Name: ${serverName}`)
-  console.log(`Known servers: ${knownServers.join(', ') || 'none'}`)
-  
-  // Scan existing files
   scanExistingFiles()
 })
 
-// Update scanExistingFiles to use only serverName
 const scanExistingFiles = () => {
   try {
     const files = fs.readdirSync(uploadsDir)
@@ -172,7 +88,6 @@ const scanExistingFiles = () => {
       if (!fileRegistry.has(fileId)) {
         fileRegistry.set(fileId, {
           fileId,
-          serverName: metadata?.serverName || serverName,
           filename: fileId,
           originalName: metadata?.originalName || fileId,
           size: stats.size,
@@ -187,69 +102,6 @@ const scanExistingFiles = () => {
   }
 }
 
-// Add registry request/response handlers to Socket.IO connection
-io.on('connection', (socket) => {
-  console.log('New connection:', socket.id)
-
-  socket.on('register-server', (serverInfo) => {
-    console.log(`Server registered: ${serverInfo.name} (${socket.id})`)
-    
-    connectedServers.set(socket.id, {
-      socket,
-      name: serverInfo.name
-    })
-
-    // Send our file registry to the newly connected server
-    socket.emit('registry-update', Array.from(fileRegistry.values()))
-  })
-
-  // Handle registry requests
-  socket.on('request-registry', () => {
-    console.log(`Registry requested by ${socket.id}`)
-    socket.emit('registry-update', Array.from(fileRegistry.values()))
-  })
-
-  // Handle registry updates from other servers
-  socket.on('registry-update', (files) => {
-    const serverInfo = connectedServers.get(socket.id)
-    if (!serverInfo) return
-
-    console.log(`Received registry update from ${serverInfo.name} with ${files.length} files`)
-    
-    // Update our registry with remote files
-    files.forEach(file => {
-      // Only add files that don't exist locally
-      if (!fileRegistry.has(file.fileId)) {
-        fileRegistry.set(file.fileId, {
-          ...file,
-          isRemote: true,
-          sourceServer: serverInfo.name,
-          sourceSocket: socket.id
-        })
-      }
-    })
-  })
-
-  // Add disconnect handler
-  socket.on('disconnect', () => {
-    const serverInfo = connectedServers.get(socket.id)
-    if (serverInfo) {
-      console.log(`Server disconnected: ${serverInfo.name}`)
-      
-      // Remove files from disconnected server
-      for (const [fileId, file] of fileRegistry.entries()) {
-        if (file.isRemote && file.sourceSocket === socket.id) {
-          fileRegistry.delete(fileId)
-        }
-      }
-      
-      connectedServers.delete(socket.id)
-    }
-  })
-})
-
-// Connect to known servers on startup
-knownServers.forEach(connectToServer)
 
 // Update upload handler to remove propagation
 app.post('/upload', upload.single('file'), async (req, res) => {
@@ -264,7 +116,6 @@ app.post('/upload', upload.single('file'), async (req, res) => {
 
     const fileInfo = {
       fileId,
-      serverName,
       filename: fileId,
       originalName: file.originalname,
       size: file.size,
@@ -275,9 +126,8 @@ app.post('/upload', upload.single('file'), async (req, res) => {
     // Update local registry
     fileRegistry.set(fileId, fileInfo)
     
-    // Save metadata
+    // Save metadata 
     fileMetadata.set(fileId, {
-      serverName,
       originalName: file.originalname,
       mimeType: file.mimetype,
       uploadDate
@@ -296,54 +146,17 @@ app.get('/files', async (req, res) => {
   res.json(Array.from(fileRegistry.values()))
 })
 
-// Update download endpoint to handle remote files
 app.get('/download/:fileId', async (req, res) => {
   const { fileId } = req.params
   const fileInfo = fileRegistry.get(fileId)
-
-  console.log('Download request for:', fileId)
-  console.log('File info:', fileInfo)
 
   if (!fileInfo) {
     return res.status(404).json({ error: 'File not found in registry' })
   }
 
   try {
-    if (fileInfo.isRemote) {
-      // Forward download request to source server
-      const sourceServer = connectedServers.get(fileInfo.sourceSocket)
-      if (!sourceServer || !sourceServer.socket.connected) {
-        fileRegistry.delete(fileId) // Clean up stale entry
-        return res.status(404).json({ error: 'Source server not available' })
-      }
-
-      // Request file from source server
-      sourceServer.socket.emit('file-request', fileId)
-      
-      // Set up one-time handler for file response
-      sourceServer.socket.once(`file-response:${fileId}`, (fileData) => {
-        if (!fileData || fileData.error) {
-          return res.status(404).json({ error: 'File not available' })
-        }
-        
-        // Stream the file data to the client
-        res.setHeader('Content-Type', fileInfo.mimeType)
-        res.setHeader('Content-Disposition', `attachment; filename="${fileInfo.originalName}"`)
-        res.send(fileData.buffer)
-      })
-
-      // Set timeout for response
-      setTimeout(() => {
-        sourceServer.socket.off(`file-response:${fileId}`)
-        if (!res.headersSent) {
-          res.status(504).json({ error: 'Download request timed out' })
-        }
-      }, 30000)
-    } else {
-      // Serve local file
-      const filePath = path.join('./uploads', fileInfo.filename)
-      return res.download(filePath, fileInfo.originalName)
-    }
+    const filePath = path.join('./uploads', fileInfo.filename)
+    return res.download(filePath, fileInfo.originalName)
   } catch (error) {
     console.error('Error downloading file:', error)
     res.status(500).json({ 
@@ -353,65 +166,9 @@ app.get('/download/:fileId', async (req, res) => {
   }
 })
 
-// Simplify status endpoint
 app.get('/status', (req, res) => {
   const status = {
-    serverName,
-    connectedServers: Array.from(connectedServers.values())
-      .filter(info => info.socket?.connected)
-      .map(info => ({
-        name: info.name
-      })),
     totalFiles: fileRegistry.size
   }
   res.json(status)
-})
-
-// Add this near the start of the file
-setInterval(() => {
-  console.log('Connected servers:', Array.from(connectedServers.entries()).map(([url, info]) => ({
-    url,
-    name: info.name,
-    connected: info.socket?.connected
-  })))
-}, 10000)
-
-// Add this near the start of the file
-setInterval(() => {
-  console.log('Connection status:', Array.from(connectedServers.entries()).map(([url, info]) => ({
-    url,
-    name: info.name,
-    connected: info.socket?.connected,
-    transport: info.socket?.io?.engine?.transport?.name,
-    state: info.socket?.io?.engine?.readyState
-  })))
-}, 10000)
-
-// Add this after the imports and before any other code
-function cleanServerUrl(url) {
-  if (!url) return ''
-  // Remove trailing slash and ensure consistent format
-  return url.trim().replace(/\/+$/, '')
-}
-
-// Add file request handler to socket connection
-io.on('connection', (socket) => {
-  // ... existing connection handlers ...
-
-  socket.on('file-request', async (fileId) => {
-    const fileInfo = fileRegistry.get(fileId)
-    if (!fileInfo || fileInfo.isRemote) {
-      socket.emit(`file-response:${fileId}`, { error: 'File not found' })
-      return
-    }
-
-    try {
-      const filePath = path.join('./uploads', fileInfo.filename)
-      const buffer = await fs.promises.readFile(filePath)
-      socket.emit(`file-response:${fileId}`, { buffer })
-    } catch (error) {
-      console.error('Error reading file:', error)
-      socket.emit(`file-response:${fileId}`, { error: 'Failed to read file' })
-    }
-  })
 })
