@@ -1,43 +1,25 @@
-import { useState, useEffect, useCallback } from "react";
-import FileUpload from "./components/FileUpload";
-import FileList from "./components/FileList";
+import { Header } from "./components/layout/Header";
+import { FileUpload } from "./components/file/FileUpload";
+import { FileList } from "./components/file/FileList";
+import { useFiles } from "./hooks/useFiles";
 import "./App.css";
 
 function App() {
-  const [files, setFiles] = useState([]);
+  const { files, isLoading, error, refetch } = useFiles();
   const serverUrl = import.meta.env.VITE_SERVER_URL || "http://localhost:3001";
-
-  const fetchFiles = useCallback(async () => {
-    try {
-      const response = await fetch(`${serverUrl}/files`);
-      const data = await response.json();
-      setFiles(data);
-    } catch (error) {
-      console.error("Failed to fetch files:", error);
-    }
-  }, [serverUrl]);
-
-  useEffect(() => {
-    fetchFiles();
-    const interval = setInterval(fetchFiles, 5000);
-    return () => clearInterval(interval);
-  }, [fetchFiles]);
-
-  const handleFileUpload = (newFiles) => {
-    setFiles((prev) => [...prev, ...newFiles]);
-    fetchFiles();
-  };
 
   return (
     <div className="container">
-      <header>
-        <h1>FileShare</h1>
-        <p className="subtitle">Simple, secure file sharing</p>
-      </header>
+      <Header title="FileShare" subtitle="Simple, secure file sharing" />
 
       <main>
-        <FileUpload onUpload={handleFileUpload} serverUrl={serverUrl} />
-        <FileList files={files} />
+        <FileUpload onUpload={refetch} serverUrl={serverUrl} />
+        {error && <div className="error-message">{error}</div>}
+        {isLoading ? (
+          <div className="loading">Loading...</div>
+        ) : (
+          <FileList files={files} />
+        )}
       </main>
     </div>
   );

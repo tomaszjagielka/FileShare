@@ -1,31 +1,34 @@
 import { useState, useCallback } from "react";
 import PropTypes from "prop-types";
 
-function FileUpload({ onUpload, serverUrl }) {
+export function FileUpload({ onUpload, serverUrl }) {
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
 
-  const uploadFile = async (files) => {
-    setIsUploading(true);
-    try {
-      const formData = new FormData();
-      for (const file of files) {
-        formData.append("file", file);
+  const uploadFile = useCallback(
+    async (files) => {
+      setIsUploading(true);
+      try {
+        const formData = new FormData();
+        for (const file of files) {
+          formData.append("file", file);
+        }
+
+        const response = await fetch(`${serverUrl}/upload`, {
+          method: "POST",
+          body: formData,
+        });
+
+        const data = await response.json();
+        onUpload([data]);
+      } catch (error) {
+        console.error("Upload failed:", error);
+      } finally {
+        setIsUploading(false);
       }
-
-      const response = await fetch(`${serverUrl}/upload`, {
-        method: "POST",
-        body: formData,
-      });
-
-      const data = await response.json();
-      onUpload([data]);
-    } catch (error) {
-      console.error("Upload failed:", error);
-    } finally {
-      setIsUploading(false);
-    }
-  };
+    },
+    [serverUrl, onUpload]
+  );
 
   const handleDrag = useCallback((e) => {
     e.preventDefault();
@@ -44,23 +47,29 @@ function FileUpload({ onUpload, serverUrl }) {
     setIsDragging(false);
   }, []);
 
-  const handleDrop = useCallback((e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(false);
+  const handleDrop = useCallback(
+    (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsDragging(false);
 
-    const files = [...e.dataTransfer.files];
-    if (files && files.length > 0) {
-      uploadFile(files);
-    }
-  }, []);
+      const files = [...e.dataTransfer.files];
+      if (files && files.length > 0) {
+        uploadFile(files);
+      }
+    },
+    [uploadFile]
+  );
 
-  const handleFileSelect = (e) => {
-    const files = [...e.target.files];
-    if (files && files.length > 0) {
-      uploadFile(files);
-    }
-  };
+  const handleFileSelect = useCallback(
+    (e) => {
+      const files = [...e.target.files];
+      if (files && files.length > 0) {
+        uploadFile(files);
+      }
+    },
+    [uploadFile]
+  );
 
   return (
     <div className="upload-container">
@@ -92,5 +101,3 @@ FileUpload.propTypes = {
   onUpload: PropTypes.func.isRequired,
   serverUrl: PropTypes.string.isRequired,
 };
-
-export default FileUpload;

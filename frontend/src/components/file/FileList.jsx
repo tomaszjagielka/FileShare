@@ -1,8 +1,8 @@
 import PropTypes from "prop-types";
+import { formatFileSize, formatDate } from "../../utils/formatters";
+import { getDownloadUrl } from "../../services/api";
 
-function FileList({ files }) {
-  const serverUrl = import.meta.env.VITE_SERVER_URL || "http://localhost:3001";
-
+export function FileList({ files }) {
   if (!files || files.length === 0) {
     return null;
   }
@@ -13,44 +13,23 @@ function FileList({ files }) {
     return dateB - dateA;
   });
 
-  const formatFileSize = (bytes) => {
-    if (!bytes || bytes === 0) return "0 Bytes";
-    const k = 1024;
-    const sizes = ["Bytes", "KB", "MB", "GB"];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
-  };
-
-  const formatDate = (dateString) => {
-    if (!dateString) return "Unknown date";
-    try {
-      const date = new Date(dateString);
-      return date.toLocaleDateString("en-US", {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-    } catch (error) {
-      console.error("Error formatting date:", error);
-      return dateString;
-    }
-  };
-
   const handleCopyLink = (fileId) => {
-    if (!fileId) return;
-    const shareLink = `${serverUrl}/download/${fileId}`;
+    if (!fileId) {
+      return;
+    }
+
     navigator.clipboard
-      .writeText(shareLink)
+      .writeText(getDownloadUrl(fileId))
       .then(() => alert("Link copied to clipboard!"))
       .catch((err) => console.error("Failed to copy:", err));
   };
 
   const handleDownload = (fileId) => {
-    if (!fileId) return;
-    const downloadUrl = `${serverUrl}/download/${fileId}`;
-    window.location.href = downloadUrl;
+    if (!fileId) {
+      return;
+    }
+
+    window.location.href = getDownloadUrl(fileId);
   };
 
   return (
@@ -83,7 +62,7 @@ function FileList({ files }) {
                 </button>
                 <button
                   className="action-button download-button"
-                  onClick={() => handleDownload(file.fileId, file.originalName)}
+                  onClick={() => handleDownload(file.fileId)}
                   title="Download file"
                 >
                   Download
@@ -106,5 +85,3 @@ FileList.propTypes = {
     })
   ).isRequired,
 };
-
-export default FileList;
