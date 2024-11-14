@@ -1,5 +1,5 @@
 # Create deploy script
-cat > ~/MeshShare/deploy.sh << 'EOF'
+cat > ~/FileShare/deploy.sh << 'EOF'
 #!/bin/bash
 # Build the project
 npm run build:prod

@@ -1,72 +1,46 @@
-import { useState, useEffect } from 'react'
-import FileUpload from './components/FileUpload'
-import FileList from './components/FileList'
-import ServerStatus from './components/ServerStatus'
-import './App.css'
+import { useState, useEffect } from "react";
+import FileUpload from "./components/FileUpload";
+import FileList from "./components/FileList";
+import "./App.css";
 
 function App() {
-  const [files, setFiles] = useState([])
-  const [status, setStatus] = useState(null)
-  const [selectedServer, setSelectedServer] = useState(process.env.SERVER_URL || 'http://localhost:3000')
-  const serverUrl = import.meta.env.VITE_SERVER_URL || 'http://localhost:3001'
+  const [files, setFiles] = useState([]);
+  const serverUrl = import.meta.env.VITE_SERVER_URL || "http://localhost:3001";
 
   const fetchFiles = async () => {
     try {
-      const response = await fetch(`${serverUrl}/files`)
-      const data = await response.json()
-      setFiles(data)
+      const response = await fetch(`${serverUrl}/files`);
+      const data = await response.json();
+      setFiles(data);
     } catch (error) {
-      console.error('Failed to fetch files:', error)
+      console.error("Failed to fetch files:", error);
     }
-  }
+  };
 
-  const fetchStatus = async () => {
-    try {
-      const response = await fetch(`${serverUrl}/status`)
-      const data = await response.json()
-      setStatus(data)
-    } catch (error) {
-      console.error('Failed to fetch status:', error)
-    }
-  }
-
-  // Fetch files and status when component mounts
   useEffect(() => {
-    fetchFiles()
-    fetchStatus()
-    const interval = setInterval(fetchStatus, 5000)
-    return () => clearInterval(interval)
-  }, [])
+    fetchFiles();
+    const interval = setInterval(fetchFiles, 5000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleFileUpload = (newFiles) => {
-    setFiles(prev => [...prev, ...newFiles])
-    fetchFiles() // Refresh the file list after upload
-  }
-
-  const handleServerChange = (newServer) => {
-    setSelectedServer(newServer)
-  }
+    setFiles((prev) => [...prev, ...newFiles]);
+    fetchFiles(); // Refresh the file list after upload
+  };
 
   return (
     <div className="container">
       <header>
-        <h1>File share hub</h1>
+        <h1>FileShare</h1>
         <p className="subtitle">Simple, secure file sharing</p>
       </header>
-      
+
       <main>
-        <ServerStatus serverUrl={serverUrl} />
-        <FileUpload 
-          onUpload={handleFileUpload}
-          serverUrl={serverUrl}
-          connectedServers={status?.connectedServers || []}
-          onServerChange={handleServerChange}
-          status={status}
-        />
+        <FileUpload onUpload={handleFileUpload} serverUrl={serverUrl} />
         <FileList files={files} />
       </main>
     </div>
-  )
+  );
 }
 
-export default App
+export default App;

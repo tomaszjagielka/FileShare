@@ -104,10 +104,6 @@ header {
   flex-wrap: wrap;
 }
 
-.server-info {
-  color: #646cff;
-}
-
 .share-button {
   background: #646cff;
   color: white;
@@ -180,12 +176,6 @@ header {
   padding-right: 1rem;
 }
 
-.server-list {
-  word-break: break-word;
-  line-height: 1.4;
-  max-width: calc(100% - 160px);
-}
-
 .server-status.error {
   color: #ff4646;
   border-color: #ff4646;
@@ -201,79 +191,10 @@ header {
     flex-direction: column;
     gap: 0.2rem;
   }
-  
+
   .status-label {
     min-width: auto;
     white-space: normal;
-  }
-
-  .server-list {
-    max-width: 100%;
-    margin-top: 0.2rem;
-  }
-}
-
-.server-selector {
-  margin-bottom: 1rem;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.server-selector label {
-  color: #888;
-}
-
-.server-selector select {
-  padding: 0.5rem;
-  border-radius: 6px;
-  border: 1px solid #646cff;
-  background: rgba(255, 255, 255, 0.03);
-  color: #fff;
-  cursor: pointer;
-  flex: 1;
-  max-width: 400px;
-  appearance: none;
-  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23646cff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
-  background-repeat: no-repeat;
-  background-position: right 0.7rem center;
-  background-size: 1em;
-  padding-right: 2.5rem;
-}
-
-.server-selector select option {
-  background-color: #242424;
-  color: #fff;
-  padding: 0.8rem;
-}
-
-.server-selector select option:hover,
-.server-selector select option:focus {
-  background-color: #646cff;
-}
-
-.server-selector select:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-  border-color: #4b4b4b;
-}
-
-.server-selector select:focus {
-  outline: none;
-  border-color: #535bf2;
-  box-shadow: 0 0 0 2px rgba(100, 108, 255, 0.2);
-}
-
-/* Update mobile styles */
-@media (max-width: 640px) {
-  .server-selector {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 0.25rem;
-  }
-  
-  .server-selector select {
-    max-width: none;
   }
 }
 
