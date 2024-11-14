@@ -1,18 +1,25 @@
 # Create deploy script
 cat > ~/FileShare/deploy.sh << 'EOF'
 #!/bin/bash
-# Build the project
-npm run build:prod
 
-# Copy to web directory
+# Deploy frontend
+cd frontend
+npm install
+npm run build
+
+# Copy frontend to web directory
 sudo cp -r dist/* /var/www/meshshare/
 
-# Fix permissions
+# Fix frontend permissions
 sudo chown -R www-data:www-data /var/www/meshshare
 sudo chmod -R 755 /var/www/meshshare
 
-# Reload nginx (optional, only if needed)
-# sudo systemctl reload nginx
+# Deploy backend
+cd ../backend
+npm install
+
+# Restart backend service (assuming you're using PM2 or similar)
+pm2 restart meshshare-backend
 
 echo "Deployment complete!"
 EOF
