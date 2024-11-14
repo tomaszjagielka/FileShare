@@ -138,66 +138,6 @@ header {
   }
 }
 
-/* Server Status */
-.server-status {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid #646cff;
-  border-radius: 8px;
-  padding: 1rem;
-  margin-bottom: 2rem;
-}
-
-.server-status h3 {
-  margin: 0 0 1rem 0;
-  font-size: 1.2rem;
-}
-
-.status-info {
-  display: grid;
-  gap: 0.5rem;
-}
-
-.status-item {
-  display: flex;
-  gap: 0.5rem;
-  align-items: flex-start;
-}
-
-.status-label {
-  color: #888;
-  min-width: 160px;
-  flex-shrink: 0;
-  white-space: nowrap;
-}
-
-.status-value {
-  color: #646cff;
-  flex: 1;
-  padding-right: 1rem;
-}
-
-.server-status.error {
-  color: #ff4646;
-  border-color: #ff4646;
-}
-
-.server-status.loading {
-  color: #888;
-}
-
-/* Update mobile styles */
-@media (max-width: 640px) {
-  .status-item {
-    flex-direction: column;
-    gap: 0.2rem;
-  }
-
-  .status-label {
-    min-width: auto;
-    white-space: normal;
-  }
-}
-
 .file-actions {
   display: flex;
   gap: 0.5rem;

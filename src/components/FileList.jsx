@@ -1,9 +1,7 @@
 import PropTypes from "prop-types";
-import { useState } from "react";
 
 function FileList({ files }) {
   const serverUrl = import.meta.env.VITE_SERVER_URL || "http://localhost:3001";
-  const [shareLinks, setShareLinks] = useState({});
 
   if (!files || files.length === 0) {
     return null;
@@ -49,7 +47,7 @@ function FileList({ files }) {
       .catch((err) => console.error("Failed to copy:", err));
   };
 
-  const handleDownload = (fileId, originalName) => {
+  const handleDownload = (fileId) => {
     if (!fileId) return;
     const downloadUrl = `${serverUrl}/download/${fileId}`;
     window.location.href = downloadUrl;
