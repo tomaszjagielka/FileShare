@@ -1,0 +1,11 @@
+/* Global styles - core layout and container styles for the application. */
+
+#root {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 2rem;
+}
+
+.container {
+  width: 100%;
+}

@@ -1,0 +1,60 @@
+.fileList {
+  margin-top: 2rem;
+}
+
+.fileList h2 {
+  margin-bottom: 1.5rem;
+  font-size: 1.8rem;
+}
+
+.files {
+  display: grid;
+  gap: 1rem;
+}
+
+.fileItem {
+  display: flex;
+  align-items: center;
+  padding: 1rem;
+  border: 1px solid #646cff;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.fileIcon {
+  font-size: 2rem;
+  margin-right: 1rem;
+}
+
+.fileDetails {
+  flex: 1;
+  min-width: 200px;
+}
+
+.fileName {
+  font-weight: 500;
+  font-size: 1.1rem;
+  margin-bottom: 0.5rem;
+}
+
+.fileInfo {
+  display: flex;
+  gap: 1rem;
+  color: #888;
+  font-size: 0.9rem;
+  flex-wrap: wrap;
+}
+
+.shareLink {
+  margin-top: 0.5rem;
+  color: #646cff;
+  word-break: break-all;
+}
+
+@media (max-width: 640px) {
+  .fileItem {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+}

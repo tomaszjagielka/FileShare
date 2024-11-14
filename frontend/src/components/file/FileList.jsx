@@ -1,6 +1,8 @@
 import PropTypes from "prop-types";
 import { formatFileSize, formatDate } from "../../utils/formatters";
 import { getDownloadUrl } from "../../services/api";
+import styles from "../../styles/components/FileList.module.css";
+import buttonStyles from "../../styles/shared/buttons.module.css";
 
 export function FileList({ files }) {
   if (!files || files.length === 0) {
@@ -33,35 +35,37 @@ export function FileList({ files }) {
   };
 
   return (
-    <div className="file-list">
+    <div className={styles.fileList}>
       <h2>Uploaded files</h2>
-      <div className="files">
+      <div className={styles.files}>
         {sortedFiles
           .filter((file) => file && file.fileId)
           .map((file) => (
-            <div key={file.fileId} className="file-item">
-              <div className="file-icon">📄</div>
-              <div className="file-details">
-                <div className="file-name">
+            <div key={file.fileId} className={styles.fileItem}>
+              <div className={styles.fileIcon}>📄</div>
+              <div className={styles.fileDetails}>
+                <div className={styles.fileName}>
                   {file.originalName || "Unknown file"}
                 </div>
-                <div className="file-info">
-                  <span className="file-size">{formatFileSize(file.size)}</span>
-                  <span className="upload-date">
+                <div className={styles.fileInfo}>
+                  <span className={styles.fileSize}>
+                    {formatFileSize(file.size)}
+                  </span>
+                  <span className={styles.uploadDate}>
                     {formatDate(file.uploadDate)}
                   </span>
                 </div>
               </div>
-              <div className="file-actions">
+              <div className={styles.fileActions}>
                 <button
-                  className="action-button copy-button"
+                  className={buttonStyles.shareButton}
                   onClick={() => handleCopyLink(file.fileId)}
                   title="Copy download link"
                 >
                   Copy link
                 </button>
                 <button
-                  className="action-button download-button"
+                  className={buttonStyles.shareButton}
                   onClick={() => handleDownload(file.fileId)}
                   title="Download file"
                 >

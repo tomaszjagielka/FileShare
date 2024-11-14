@@ -1,0 +1,53 @@
+.button {
+  background: #646cff;
+  color: white;
+  border: none;
+  padding: 0.6em 1.2em;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: background-color 0.2s;
+}
+
+.button:hover {
+  background: #535bf2;
+}
+
+.copyButton {
+  composes: button;
+  background: #4b4b4b;
+}
+
+.copyButton:hover {
+  background: #5a5a5a;
+}
+
+.shareButton {
+  composes: button;
+  margin-left: 1rem;
+}
+
+.fileActions {
+  display: flex;
+  gap: 0.5rem;
+  margin-left: 1rem;
+}
+
+@media (max-width: 640px) {
+  .shareButton {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .fileActions {
+    margin-left: 0;
+    width: 100%;
+    flex-direction: row;
+    gap: 0.5rem;
+  }
+
+  .button {
+    flex: 1;
+    text-align: center;
+  }
+}

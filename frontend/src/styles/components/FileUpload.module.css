@@ -1,0 +1,33 @@
+.uploadContainer {
+  margin-bottom: 2rem;
+}
+
+.dropZone {
+  border: 2px dashed #646cff;
+  border-radius: 8px;
+  padding: 2rem;
+  text-align: center;
+  background: rgba(100, 108, 255, 0.05);
+}
+
+.dropZone.dragging {
+  background: rgba(100, 108, 255, 0.1);
+}
+
+.fileInput {
+  display: none;
+}
+
+.fileInputLabel {
+  background: #646cff;
+  color: white;
+  padding: 0.6em 1.2em;
+  border-radius: 8px;
+  cursor: pointer;
+  display: inline-block;
+  margin-top: 1rem;
+}
+
+.fileInputLabel:hover {
+  background: #535bf2;
+}

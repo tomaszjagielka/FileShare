@@ -1,5 +1,6 @@
 import { useState, useCallback } from "react";
 import PropTypes from "prop-types";
+import styles from "../../styles/components/FileUpload.module.css";
 
 export function FileUpload({ onUpload, serverUrl }) {
   const [isDragging, setIsDragging] = useState(false);
@@ -72,22 +73,22 @@ export function FileUpload({ onUpload, serverUrl }) {
   );
 
   return (
-    <div className="upload-container">
+    <div className={styles.uploadContainer}>
       <div
-        className={`drop-zone ${isDragging ? "dragging" : ""}`}
+        className={`${styles.dropZone} ${isDragging ? styles.dragging : ""}`}
         onDragEnter={handleDragIn}
         onDragLeave={handleDragOut}
         onDragOver={handleDrag}
         onDrop={handleDrop}
       >
-        <div className="upload-icon">📁</div>
+        <div className={styles.uploadIcon}>📁</div>
         <p>{isUploading ? "Uploading..." : "Drag and drop files here or"}</p>
-        <label className="file-input-label">
+        <label className={styles.fileInputLabel}>
           <input
             type="file"
             multiple
             onChange={handleFileSelect}
-            className="file-input"
+            className={styles.fileInput}
             disabled={isUploading}
           />
           Browse files

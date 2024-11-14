@@ -1,0 +1,25 @@
+/* CSS variables - global design tokens for colors, typography, and theme configuration. */
+
+:root {
+  /* Colors. */
+  --color-primary: #646cff;
+  --color-primary-hover: #535bf2;
+  --color-background: #242424;
+  --color-text: rgba(255, 255, 255, 0.87);
+  --color-text-secondary: #888;
+  --color-button: #1a1a1a;
+
+  /* Typography. */
+  --font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  --line-height-base: 1.5;
+  --font-weight-base: 400;
+  --font-weight-medium: 500;
+
+  /* Light theme overrides. */
+  @media (prefers-color-scheme: light) {
+    --color-background: #ffffff;
+    --color-text: #213547;
+    --color-button: #f9f9f9;
+    --color-primary-hover: #747bff;
+  }
+}

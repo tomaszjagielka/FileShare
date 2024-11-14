@@ -2,7 +2,8 @@ import { Header } from "./components/layout/Header";
 import { FileUpload } from "./components/file/FileUpload";
 import { FileList } from "./components/file/FileList";
 import { useFiles } from "./hooks/useFiles";
-import "./App.css";
+import styles from "./styles/components/Feedback.module.css";
+import "./styles/base/global.css";
 
 function App() {
   const { files, isLoading, error, refetch } = useFiles();
@@ -14,9 +15,9 @@ function App() {
 
       <main>
         <FileUpload onUpload={refetch} serverUrl={serverUrl} />
-        {error && <div className="error-message">{error}</div>}
+        {error && <div className={styles.error}>{error}</div>}
         {isLoading ? (
-          <div className="loading">Loading...</div>
+          <div className={styles.loading}>Loading...</div>
         ) : (
           <FileList files={files} />
         )}

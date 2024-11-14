@@ -1,9 +1,10 @@
 import PropTypes from "prop-types";
+import styles from "../../styles/components/Header.module.css";
 
 export const Header = ({ title, subtitle }) => (
-  <header>
+  <header className={styles.header}>
     <h1>{title}</h1>
-    {subtitle && <p className="subtitle">{subtitle}</p>}
+    {subtitle && <p className={styles.subtitle}>{subtitle}</p>}
   </header>
 );
 
