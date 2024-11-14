@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import FileUpload from "./components/FileUpload";
 import FileList from "./components/FileList";
 import "./App.css";
@@ -7,7 +7,7 @@ function App() {
   const [files, setFiles] = useState([]);
   const serverUrl = import.meta.env.VITE_SERVER_URL || "http://localhost:3001";
 
-  const fetchFiles = async () => {
+  const fetchFiles = useCallback(async () => {
     try {
       const response = await fetch(`${serverUrl}/files`);
       const data = await response.json();
@@ -15,13 +15,13 @@ function App() {
     } catch (error) {
       console.error("Failed to fetch files:", error);
     }
-  };
+  }, [serverUrl]);
 
   useEffect(() => {
     fetchFiles();
     const interval = setInterval(fetchFiles, 5000);
     return () => clearInterval(interval);
-  }, []);
+  }, [fetchFiles]);
 
   const handleFileUpload = (newFiles) => {
     setFiles((prev) => [...prev, ...newFiles]);
