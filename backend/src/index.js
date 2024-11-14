@@ -6,10 +6,8 @@ import { v4 as uuidv4 } from "uuid";
 import dotenv from "dotenv";
 import fs from "fs";
 
-// Configure dotenv
 dotenv.config();
 
-// Ensure uploads directory exists
 const uploadsDir = "./uploads";
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
@@ -17,7 +15,6 @@ if (!fs.existsSync(uploadsDir)) {
 
 const app = express();
 
-// Middleware setup
 app.use(
   cors({
     origin: "*",
@@ -27,11 +24,9 @@ app.use(
 );
 app.use(express.json());
 
-// Simplify metadata to only store essential file info
 const metadataPath = path.join(uploadsDir, "metadata.json");
 const fileMetadata = new Map();
 
-// Configure multer storage
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, uploadsDir);
@@ -44,7 +39,6 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage });
 
-// Load metadata on startup
 try {
   if (fs.existsSync(metadataPath)) {
     const data = JSON.parse(fs.readFileSync(metadataPath, "utf8"));
@@ -56,7 +50,6 @@ try {
   console.error("Error loading metadata:", error);
 }
 
-// Save metadata helper
 const saveMetadata = () => {
   try {
     fs.writeFileSync(
@@ -69,9 +62,8 @@ const saveMetadata = () => {
 };
 
 const PORT = process.env.PORT || 3001;
-const fileRegistry = new Map(); // fileId -> { fileId, filename, etc }
+const fileRegistry = new Map();
 
-// Start the server
 app.listen(PORT, () => {
   console.log(`Server running at http://localhost:${PORT}`);
   scanExistingFiles();
@@ -104,7 +96,6 @@ const scanExistingFiles = () => {
   }
 };
 
-// Update upload handler to remove propagation
 app.post("/upload", upload.single("file"), async (req, res) => {
   try {
     if (!req.file) {
@@ -123,10 +114,8 @@ app.post("/upload", upload.single("file"), async (req, res) => {
       uploadDate,
     };
 
-    // Update local registry
     fileRegistry.set(fileId, fileInfo);
 
-    // Save metadata
     fileMetadata.set(fileId, {
       originalName: file.originalname,
       uploadDate,
@@ -140,7 +129,6 @@ app.post("/upload", upload.single("file"), async (req, res) => {
   }
 });
 
-// Simplify files endpoint to only return local files
 app.get("/files", async (req, res) => {
   res.json(Array.from(fileRegistry.values()));
 });

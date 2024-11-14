@@ -25,7 +25,7 @@ function App() {
 
   const handleFileUpload = (newFiles) => {
     setFiles((prev) => [...prev, ...newFiles]);
-    fetchFiles(); // Refresh the file list after upload
+    fetchFiles();
   };
 
   return (
