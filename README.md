@@ -1,5 +1,8 @@
 # FileShare - Tutorial
 
+![FileShare Application Screenshot](./docs/images/fileshare-screenshot.png)
+_FileShare - aplikacja do udostępniania plików_
+
 Cześć! Ten tutorial pomoże Ci stworzyć prostą aplikację do udostępniania plików. Jest przeznaczony dla studentów Politechniki Poznańskiej na przedmiot Aplikacje Internetowe.
 
 ## Co będziemy robić?
