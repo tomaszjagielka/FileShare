@@ -94,7 +94,6 @@ const scanExistingFiles = () => {
           filename: fileId,
           originalName: metadata?.originalName || fileId,
           size: stats.size,
-          mimeType: metadata?.mimeType || "application/octet-stream",
           uploadDate: metadata?.uploadDate || stats.mtime.toISOString(),
         });
       }
@@ -121,7 +120,6 @@ app.post("/upload", upload.single("file"), async (req, res) => {
       filename: fileId,
       originalName: file.originalname,
       size: file.size,
-      mimeType: file.mimetype,
       uploadDate,
     };
 
@@ -131,7 +129,6 @@ app.post("/upload", upload.single("file"), async (req, res) => {
     // Save metadata
     fileMetadata.set(fileId, {
       originalName: file.originalname,
-      mimeType: file.mimetype,
       uploadDate,
     });
     saveMetadata();
