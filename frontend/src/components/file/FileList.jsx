@@ -86,6 +86,6 @@ FileList.propTypes = {
       originalName: PropTypes.string,
       size: PropTypes.number,
       uploadDate: PropTypes.string,
-    })
+    }),
   ).isRequired,
 };

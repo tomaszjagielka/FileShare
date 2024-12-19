@@ -27,7 +27,7 @@ export function FileUpload({ onUpload, serverUrl }) {
         setIsUploading(false);
       }
     },
-    [serverUrl, onUpload]
+    [serverUrl, onUpload],
   );
 
   const handleFileSelect = useCallback(
@@ -37,7 +37,7 @@ export function FileUpload({ onUpload, serverUrl }) {
         uploadFile(files);
       }
     },
-    [uploadFile]
+    [uploadFile],
   );
 
   return (

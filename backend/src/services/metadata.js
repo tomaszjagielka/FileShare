@@ -22,7 +22,7 @@ class MetadataService {
     try {
       await fs.writeFile(
         metadataPath,
-        JSON.stringify(Object.fromEntries(this.#metadata))
+        JSON.stringify(Object.fromEntries(this.#metadata)),
       );
     } catch (error) {
       console.error("Error saving metadata:", error);

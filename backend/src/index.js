@@ -20,7 +20,7 @@ app.use(
     origin: "*",
     methods: ["GET", "POST"],
     exposedHeaders: ["Content-Disposition"],
-  })
+  }),
 );
 app.use(express.json());
 
@@ -54,7 +54,7 @@ const saveMetadata = () => {
   try {
     fs.writeFileSync(
       metadataPath,
-      JSON.stringify(Object.fromEntries(fileMetadata))
+      JSON.stringify(Object.fromEntries(fileMetadata)),
     );
   } catch (error) {
     console.error("Error saving metadata:", error);
