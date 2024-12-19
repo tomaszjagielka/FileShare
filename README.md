@@ -96,43 +96,13 @@ frontend
     └── formatters.js - formatowanie danych
 ```
 
-## Krok 3: Tworzenie backendu
-
-Otwórz nowy terminal i stwórz folder na backend:
-
-```bash
-mkdir backend
-cd backend
-npm init -y fileshare-backend
-```
-
-### Struktura plików backendu:
-
-```
-backend
-├── src - kod źródłowy backendu
-│ ├── config - konfiguracja
-│ │ └── config.js - zmienne konfiguracyjne
-│ ├── middleware - funkcje pośrednie Express
-│ │ └── upload.js - obsługa wysyłania plików
-│ ├── routes - endpointy API
-│ │ └── file.js - endpointy do obsługi plików
-│ ├── services - logika biznesowa
-│ │ └── file.js - operacje na plikach
-│ │ └── metadata.js - obsługa metadanych plików
-│ ├── package.json - zależności projektu
-│ ├── index.js - główny plik serwera
-```
-
-## Krok 4: Pierwsze zmiany
+## Krok 3: Pierwsze zmiany
 
 Zmieńmy tytuł strony. W pliku `frontend/index.html`:
 
 ```html
 <title>FileShare</title>
 ```
-
-## Krok 5: Tworzenie komponentu FileItem
 
 Komponent `FileItem.jsx` odpowiada za wyświetlanie pojedynczego pliku na liście. Zawiera podstawowe informacje o pliku (nazwę, rozmiar, datę) oraz przyciski do pobrania i skopiowania linku.
 
@@ -220,7 +190,288 @@ FileItem.propTypes = {
    - Definicja wymaganych właściwości dla komponentu
    - Sprawdzanie typów danych w trybie deweloperskim
 
-W następnym kroku stworzymy funkcje pomocnicze `formatFileSize` i `formatDate` oraz funkcję `getDownloadUrl` do komunikacji z API.
+## Krok 4: Podstawowy layout
+
+Teraz stworzymy style dla komponentu Header, który będzie odpowiedzialny za wygląd głównego nagłówka strony.
+
+1. Stwórz plik `frontend/src/styles/components/Header.module.css`:
+
+```css
+.header {
+  text-align: center;
+  margin-bottom: 3rem;
+}
+
+.subtitle {
+  color: #888;
+  margin-top: 0.5rem;
+  font-size: 1.1rem;
+}
+```
+
+### Co zawierają te style?
+
+1. **Kontener nagłówka (.header)**:
+
+   - Wycentrowany tekst
+   - Duży odstęp od dolnej krawędzi (3rem)
+   - Zapewnia odpowiednią separację od głównej zawartości
+
+2. **Podtytuł (.subtitle)**:
+   - Szary kolor tekstu dla hierarchii wizualnej
+   - Niewielki odstęp od góry
+   - Mniejszy rozmiar czcionki niż główny tytuł
+
+Te style zapewniają prosty, ale elegancki wygląd nagłówka strony, z wyraźną hierarchią wizualną między tytułem a podtytułem.
+
+### Przykład użycia:
+
+```jsx
+import styles from "../../styles/components/Header.module.css";
+
+export function Header({ title, subtitle }) {
+  return (
+    <header className={styles.header}>
+      <h1>{title}</h1>
+      {subtitle && <p className={styles.subtitle}>{subtitle}</p>}
+    </header>
+  );
+}
+```
+
+Teraz stworzymy główny komponent aplikacji `App.jsx`, który będzie orkiestrował wszystkie pozostałe komponenty i zarządzał stanem aplikacji.
+
+1. Zaktualizuj plik `frontend/src/App.jsx`:
+
+```jsx
+import { Header } from "./components/layout/Header";
+import { FileUpload } from "./components/file/FileUpload";
+import { FileList } from "./components/file/FileList";
+import { useFiles } from "./hooks/useFiles";
+import styles from "./styles/components/Feedback.module.css";
+import "./styles/base/global.css";
+
+function App() {
+  const { files, isLoading, error, refetch } = useFiles();
+  const serverUrl = import.meta.env.VITE_SERVER_URL || "http://localhost:3001";
+
+  return (
+    <div className="container">
+      <Header title="FileShare" subtitle="Simple, secure file sharing" />
+
+      <main>
+        <FileUpload onUpload={refetch} serverUrl={serverUrl} />
+        {error && <div className={styles.error}>{error}</div>}
+        {isLoading ? (
+          <div className={styles.loading}>Loading...</div>
+        ) : (
+          <FileList files={files} />
+        )}
+      </main>
+    </div>
+  );
+}
+
+export default App;
+```
+
+### Co się dzieje w tym komponencie?
+
+1. **Importy**:
+
+   - Komponenty interfejsu (`Header`, `FileUpload`, `FileList`)
+   - Hook `useFiles` do zarządzania listą plików
+   - Style dla komunikatów zwrotnych
+   - Globalne style aplikacji
+
+2. **Konfiguracja**:
+
+   - Pobranie adresu serwera z zmiennych środowiskowych
+   - Domyślny fallback na `http://localhost:3001` jeśli zmienna nie jest ustawiona
+
+3. **Zarządzanie stanem**:
+
+   - Użycie hooka `useFiles` do pobrania listy plików
+   - Obsługa stanów ładowania i błędów
+   - Funkcja `refetch` do odświeżania listy po uploadzie
+
+4. **Struktura komponentu**:
+   - Kontener główny z klasą `.container`
+   - Nagłówek z tytułem i podtytułem
+   - Sekcja główna zawierająca:
+     - Formularz uploadu plików
+     - Komunikaty o błędach (jeśli występują)
+     - Wskaźnik ładowania lub lista plików
+
+### Jak działa przepływ danych?
+
+1. **Inicjalizacja**:
+
+   - Hook `useFiles` pobiera początkową listę plików
+   - Stan ładowania jest aktywny podczas pobierania
+
+2. **Upload plików**:
+
+   - Komponent `FileUpload` otrzymuje funkcję `refetch`
+   - Po udanym uploadzie lista jest automatycznie odświeżana
+
+3. **Wyświetlanie**:
+   - Błędy są pokazywane nad listą plików
+   - Podczas ładowania wyświetlany jest wskaźnik
+   - Lista plików jest renderowana po załadowaniu danych
+
+Ten komponent stanowi rdzeń aplikacji, łącząc wszystkie funkcjonalności w spójną całość i zarządzając przepływem danych między komponentami.
+
+## Krok 5: Podstawowe style
+
+Teraz skonfigurujemy podstawowe style globalne dla naszej aplikacji. Te style będą definiować główny układ i podstawowe kontenery.
+
+1. Stwórz plik `frontend/src/styles/base/global.css`:
+
+```css
+#root {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 2rem;
+}
+
+.container {
+  width: 100%;
+}
+```
+
+### Co się dzieje w tym pliku?
+
+1. **Główny kontener (#root)**:
+
+   - Maksymalna szerokość 1280px
+   - Automatyczne marginesy dla wycentrowania
+   - Padding 2rem dla odstępu od krawędzi
+
+2. **Klasa .container**:
+   - Pełna szerokość dla responsywności
+   - Używana jako wrapper dla głównej zawartości
+
+Teraz stworzymy plik reset CSS, który ujednolici style domyślne przeglądarek.
+
+1. Stwórz plik `frontend/src/styles/base/reset.css`:
+
+```css
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+img,
+picture,
+video,
+canvas,
+svg {
+  display: block;
+  max-width: 100%;
+}
+
+input,
+button,
+textarea,
+select {
+  font: inherit;
+}
+```
+
+Teraz stworzymy plik z podstawowymi stylami typograficznymi i elementami interaktywnymi.
+
+1. Stwórz plik `frontend/src/styles/base/typography.css`:
+
+```css
+body {
+  font-family: var(--font-family);
+  line-height: var(--line-height-base);
+  font-weight: var(--font-weight-base);
+  color: var(--color-text);
+  background-color: var(--color-background);
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1 {
+  font-size: 3.2em;
+  line-height: 1.1;
+}
+
+a {
+  font-weight: var(--font-weight-medium);
+  color: var(--color-primary);
+  text-decoration: inherit;
+}
+
+a:hover {
+  color: var(--color-primary-hover);
+}
+
+button {
+  border-radius: 8px;
+  border: 1px solid transparent;
+  padding: 0.6em 1.2em;
+  font-size: 1em;
+  font-weight: var(--font-weight-medium);
+  font-family: inherit;
+  background-color: var(--color-button);
+  cursor: pointer;
+  transition: border-color 0.25s;
+}
+
+button:hover {
+  border-color: var(--color-primary);
+}
+
+button:focus,
+button:focus-visible {
+  outline: 4px auto -webkit-focus-ring-color;
+}
+```
+
+Teraz stworzymy plik ze zmiennymi CSS, które będą definiować główne wartości designu w naszej aplikacji.
+
+1. Stwórz plik `frontend/src/styles/base/variables.css`:
+
+```css
+:root {
+  /* Colors. */
+  --color-primary: #646cff;
+  --color-primary-hover: #535bf2;
+  --color-background: #242424;
+  --color-text: rgba(255, 255, 255, 0.87);
+  --color-text-secondary: #888;
+  --color-button: #1a1a1a;
+
+  /* Typography. */
+  --font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  --line-height-base: 1.5;
+  --font-weight-base: 400;
+  --font-weight-medium: 500;
+
+  /* Light theme overrides. */
+  @media (prefers-color-scheme: light) {
+    --color-background: #ffffff;
+    --color-text: #213547;
+    --color-button: #f9f9f9;
+    --color-primary-hover: #747bff;
+  }
+}
+```
 
 ## Krok 6: Tworzenie funkcji pomocniczych
 
@@ -288,8 +539,6 @@ console.log(formatFileSize(2.5 * 1024 * 1024)); // "2.5 MB"
 console.log(formatDate("2024-03-15T15:30:00")); // "Mar 15, 2024, 03:30 PM"
 console.log(formatDate(null)); // "Unknown date"
 ```
-
-W następnym kroku stworzymy funkcje do komunikacji z API, które będą odpowiedzialne za pobieranie i wysyłanie plików.
 
 ## Krok 7: Konfiguracja komunikacji z API
 
@@ -374,8 +623,6 @@ try {
 const downloadUrl = getDownloadUrl("123abc");
 console.log("Link do pobrania:", downloadUrl);
 ```
-
-W następnym kroku stworzymy hooki React, które będą korzystać z tego API do zarządzania stanem plików w aplikacji.
 
 ## Krok 8: Tworzenie hooków React
 
@@ -493,8 +740,6 @@ function FileManager() {
   );
 }
 ```
-
-W następnym kroku stworzymy style CSS dla naszych komponentów.
 
 ## Krok 9: Tworzenie stylów CSS
 
@@ -986,166 +1231,7 @@ Header.propTypes = {
 }
 ```
 
-## Krok 13: Konfiguracja globalnych stylów
-
-Teraz skonfigurujemy podstawowe style globalne dla naszej aplikacji. Te style będą definiować główny układ i podstawowe kontenery.
-
-1. Stwórz plik `frontend/src/styles/base/global.css`:
-
-```css
-#root {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
-}
-
-.container {
-  width: 100%;
-}
-```
-
-### Co się dzieje w tym pliku?
-
-1. **Główny kontener (#root)**:
-
-   - Maksymalna szerokość 1280px
-   - Automatyczne marginesy dla wycentrowania
-   - Padding 2rem dla odstępu od krawędzi
-
-2. **Klasa .container**:
-   - Pełna szerokość dla responsywności
-   - Używana jako wrapper dla głównej zawartości
-
-W następnym kroku dodamy style dla trybu ciemnego i jasnego (dark/light mode).
-
-## Krok 14: Dodawanie reset CSS
-
-Teraz stworzymy plik reset CSS, który ujednolici style domyślne przeglądarek.
-
-1. Stwórz plik `frontend/src/styles/base/reset.css`:
-
-```css
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
-
-body {
-  margin: 0;
-  min-width: 320px;
-  min-height: 100vh;
-}
-
-img,
-picture,
-video,
-canvas,
-svg {
-  display: block;
-  max-width: 100%;
-}
-
-input,
-button,
-textarea,
-select {
-  font: inherit;
-}
-```
-
-## Krok 15: Konfiguracja typografii
-
-Teraz stworzymy plik z podstawowymi stylami typograficznymi i elementami interaktywnymi.
-
-1. Stwórz plik `frontend/src/styles/base/typography.css`:
-
-```css
-body {
-  font-family: var(--font-family);
-  line-height: var(--line-height-base);
-  font-weight: var(--font-weight-base);
-  color: var(--color-text);
-  background-color: var(--color-background);
-
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-h1 {
-  font-size: 3.2em;
-  line-height: 1.1;
-}
-
-a {
-  font-weight: var(--font-weight-medium);
-  color: var(--color-primary);
-  text-decoration: inherit;
-}
-
-a:hover {
-  color: var(--color-primary-hover);
-}
-
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: var(--font-weight-medium);
-  font-family: inherit;
-  background-color: var(--color-button);
-  cursor: pointer;
-  transition: border-color 0.25s;
-}
-
-button:hover {
-  border-color: var(--color-primary);
-}
-
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
-}
-```
-
-## Krok 16: Konfiguracja zmiennych CSS
-
-Teraz stworzymy plik ze zmiennymi CSS, które będą definiować główne wartości designu w naszej aplikacji.
-
-1. Stwórz plik `frontend/src/styles/base/variables.css`:
-
-```css
-:root {
-  /* Colors. */
-  --color-primary: #646cff;
-  --color-primary-hover: #535bf2;
-  --color-background: #242424;
-  --color-text: rgba(255, 255, 255, 0.87);
-  --color-text-secondary: #888;
-  --color-button: #1a1a1a;
-
-  /* Typography. */
-  --font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
-  --line-height-base: 1.5;
-  --font-weight-base: 400;
-  --font-weight-medium: 500;
-
-  /* Light theme overrides. */
-  @media (prefers-color-scheme: light) {
-    --color-background: #ffffff;
-    --color-text: #213547;
-    --color-button: #f9f9f9;
-    --color-primary-hover: #747bff;
-  }
-}
-```
-
-## Krok 17: Konfiguracja punktu wejścia aplikacji
+## Krok 13: Feedback i komunikaty
 
 Teraz skonfigurujemy główny punkt wejścia aplikacji w pliku `main.jsx`. Ten plik jest odpowiedzialny za zainicjowanie aplikacji React i załadowanie wszystkich podstawowych stylów.
 
@@ -1195,8 +1281,6 @@ createRoot(document.getElementById("root")).render(
 4. Na końcu dodajemy globalne style aplikacji
 
 Ta kolejność zapewnia prawidłowe nadpisywanie stylów i unikanie konfliktów.
-
-## Krok 18: Tworzenie stylów dla komunikatów zwrotnych
 
 Teraz stworzymy style dla stanów ładowania i komunikatów o błędach, które będą używane w całej aplikacji.
 
@@ -1257,314 +1341,7 @@ export function SomeComponent() {
 
 Te style są już używane w komponencie FileList do wyświetlania stanów ładowania i błędów podczas pobierania listy plików.
 
-## Krok 19: Style dla listy plików
-
-Teraz stworzymy style dla komponentu FileList, które będą odpowiedzialne za układ i wygląd listy plików.
-
-1. Stwórz plik `frontend/src/styles/components/FileList.module.css`:
-
-```css
-.fileList {
-  margin-top: 2rem;
-}
-
-.fileList h2 {
-  margin-bottom: 1.5rem;
-  font-size: 1.8rem;
-}
-
-.files {
-  display: grid;
-  gap: 1rem;
-}
-
-.fileItem {
-  display: flex;
-  align-items: center;
-  padding: 1rem;
-  border: 1px solid #646cff;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.fileIcon {
-  font-size: 2rem;
-  margin-right: 1rem;
-}
-
-.fileDetails {
-  flex: 1;
-  min-width: 200px;
-}
-
-.fileName {
-  font-weight: 500;
-  font-size: 1.1rem;
-  margin-bottom: 0.5rem;
-}
-
-.fileInfo {
-  display: flex;
-  gap: 1rem;
-  color: #888;
-  font-size: 0.9rem;
-  flex-wrap: wrap;
-}
-
-.shareLink {
-  margin-top: 0.5rem;
-  color: #646cff;
-  word-break: break-all;
-}
-
-@media (max-width: 640px) {
-  .fileItem {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 1rem;
-  }
-}
-```
-
-### Co zawierają te style?
-
-1. **Układ listy (.fileList i .files)**:
-
-   - Odstęp od góry dla całej sekcji
-   - Układ typu grid dla listy plików
-   - Odstępy między elementami listy
-
-2. **Element pliku (.fileItem)**:
-
-   - Elastyczny układ z użyciem flexbox
-   - Obramowanie w kolorze akcentu (#646cff)
-   - Zaokrąglone rogi
-   - Delikatne przezroczyste tło
-
-3. **Ikona pliku (.fileIcon)**:
-
-   - Duży rozmiar czcionki dla emoji
-   - Odpowiedni odstęp od szczegółów pliku
-
-4. **Szczegóły pliku (.fileDetails, .fileName, .fileInfo)**:
-
-   - Elastyczne wypełnienie przestrzeni
-   - Minimalna szerokość dla czytelności
-   - Różne rozmiary czcionek dla hierarchii informacji
-   - Szary kolor dla drugorzędnych informacji
-
-5. **Link do udostępniania (.shareLink)**:
-
-   - Kolor akcentu dla linków
-   - Łamanie długich linków dla responsywności
-
-6. **Responsywność**:
-   - Media query dla ekranów mobilnych (<640px)
-   - Zmiana układu na pionowy na małych ekranach
-   - Dostosowanie wyrównania i odstępów
-
-Te style zapewniają spójny i responsywny wygląd listy plików, z dobrą hierarchią wizualną i czytelnym układem informacji.
-
-## Krok 20: Style dla formularza upload
-
-Teraz stworzymy style dla komponentu FileUpload, które będą odpowiedzialne za wygląd strefy przeciągania plików (drag & drop) oraz przycisku wyboru plików.
-
-1. Stwórz plik `frontend/src/styles/components/FileUpload.module.css`:
-
-```css
-.uploadContainer {
-  margin-bottom: 2rem;
-}
-
-.dropZone {
-  border: 2px dashed #646cff;
-  border-radius: 8px;
-  padding: 2rem;
-  text-align: center;
-  background: rgba(100, 108, 255, 0.05);
-}
-
-.fileInput {
-  display: none;
-}
-
-.fileInputLabel {
-  background: #646cff;
-  color: white;
-  padding: 0.6em 1.2em;
-  border-radius: 8px;
-  cursor: pointer;
-  display: inline-block;
-  margin-top: 1rem;
-}
-
-.fileInputLabel:hover {
-  background: #535bf2;
-}
-```
-
-### Co zawierają te style?
-
-1. **Kontener uploadu (.uploadContainer)**:
-
-   - Odstęp od dolnej krawędzi dla separacji od innych elementów
-
-2. **Strefa przeciągania (.dropZone)**:
-
-   - Przerywana ramka w kolorze akcentu
-   - Zaokrąglone rogi
-   - Delikatne tło dla wyróżnienia obszaru
-   - Wycentrowany tekst
-
-3. **Ukryty input plików (.fileInput)**:
-
-   - Ukrycie natywnego elementu input type="file"
-   - Zastąpienie własnym stylizowanym przyciskiem
-
-4. **Etykieta input (.fileInputLabel)**:
-   - Stylizowany przycisk w kolorze akcentu
-   - Biały tekst dla kontrastu
-   - Zaokrąglone rogi
-   - Efekt hover dla interaktywności
-   - Kursor pointer wskazujący na możliwość kliknięcia
-
-Te style tworzą przyjazny dla użytkownika interfejs do przesyłania plików, z wyraźnie oznaczoną strefą przeciągania i upuszczania oraz atrakcyjnym wizualnie przyciskiem do wyboru plików.
-
-## Krok 21: Style dla nagłówka
-
-Teraz stworzymy style dla komponentu Header, który będzie odpowiedzialny za wygląd głównego nagłówka strony.
-
-1. Stwórz plik `frontend/src/styles/components/Header.module.css`:
-
-```css
-.header {
-  text-align: center;
-  margin-bottom: 3rem;
-}
-
-.subtitle {
-  color: #888;
-  margin-top: 0.5rem;
-  font-size: 1.1rem;
-}
-```
-
-### Co zawierają te style?
-
-1. **Kontener nagłówka (.header)**:
-
-   - Wycentrowany tekst
-   - Duży odstęp od dolnej krawędzi (3rem)
-   - Zapewnia odpowiednią separację od głównej zawartości
-
-2. **Podtytuł (.subtitle)**:
-   - Szary kolor tekstu dla hierarchii wizualnej
-   - Niewielki odstęp od góry
-   - Mniejszy rozmiar czcionki niż główny tytuł
-
-Te style zapewniają prosty, ale elegancki wygląd nagłówka strony, z wyraźną hierarchią wizualną między tytułem a podtytułem.
-
-### Przykład użycia:
-
-```jsx
-import styles from "../../styles/components/Header.module.css";
-
-export function Header({ title, subtitle }) {
-  return (
-    <header className={styles.header}>
-      <h1>{title}</h1>
-      {subtitle && <p className={styles.subtitle}>{subtitle}</p>}
-    </header>
-  );
-}
-```
-
-## Krok 22: Tworzenie głównego komponentu aplikacji
-
-Teraz stworzymy główny komponent aplikacji `App.jsx`, który będzie orkiestrował wszystkie pozostałe komponenty i zarządzał stanem aplikacji.
-
-1. Zaktualizuj plik `frontend/src/App.jsx`:
-
-```jsx
-import { Header } from "./components/layout/Header";
-import { FileUpload } from "./components/file/FileUpload";
-import { FileList } from "./components/file/FileList";
-import { useFiles } from "./hooks/useFiles";
-import styles from "./styles/components/Feedback.module.css";
-import "./styles/base/global.css";
-
-function App() {
-  const { files, isLoading, error, refetch } = useFiles();
-  const serverUrl = import.meta.env.VITE_SERVER_URL || "http://localhost:3001";
-
-  return (
-    <div className="container">
-      <Header title="FileShare" subtitle="Simple, secure file sharing" />
-
-      <main>
-        <FileUpload onUpload={refetch} serverUrl={serverUrl} />
-        {error && <div className={styles.error}>{error}</div>}
-        {isLoading ? (
-          <div className={styles.loading}>Loading...</div>
-        ) : (
-          <FileList files={files} />
-        )}
-      </main>
-    </div>
-  );
-}
-
-export default App;
-```
-
-### Co się dzieje w tym komponencie?
-
-1. **Importy**:
-
-   - Komponenty interfejsu (`Header`, `FileUpload`, `FileList`)
-   - Hook `useFiles` do zarządzania listą plików
-   - Style dla komunikatów zwrotnych
-   - Globalne style aplikacji
-
-2. **Konfiguracja**:
-
-   - Pobranie adresu serwera z zmiennych środowiskowych
-   - Domyślny fallback na `http://localhost:3001` jeśli zmienna nie jest ustawiona
-
-3. **Zarządzanie stanem**:
-
-   - Użycie hooka `useFiles` do pobrania listy plików
-   - Obsługa stanów ładowania i błędów
-   - Funkcja `refetch` do odświeżania listy po uploadzie
-
-4. **Struktura komponentu**:
-   - Kontener główny z klasą `.container`
-   - Nagłówek z tytułem i podtytułem
-   - Sekcja główna zawierająca:
-     - Formularz uploadu plików
-     - Komunikaty o błędach (jeśli występują)
-     - Wskaźnik ładowania lub lista plików
-
-### Jak działa przepływ danych?
-
-1. **Inicjalizacja**:
-
-   - Hook `useFiles` pobiera początkową listę plików
-   - Stan ładowania jest aktywny podczas pobierania
-
-2. **Upload plików**:
-
-   - Komponent `FileUpload` otrzymuje funkcję `refetch`
-   - Po udanym uploadzie lista jest automatycznie odświeżana
-
-3. **Wyświetlanie**:
-   - Błędy są pokazywane nad listą plików
-   - Podczas ładowania wyświetlany jest wskaźnik
-   - Lista plików jest renderowana po załadowaniu danych
-
-Ten komponent stanowi rdzeń aplikacji, łącząc wszystkie funkcjonalności w spójną całość i zarządzając przepływem danych między komponentami.
-
-## Krok 23: Style dla przycisków
+## Krok 14: Style dla przycisków
 
 Teraz stworzymy współdzielone style dla przycisków, które będą używane w całej aplikacji.
 
@@ -1661,3 +1438,31 @@ Teraz stworzymy współdzielone style dla przycisków, które będą używane w 
    - Wyrównanie tekstu do środka
 
 Te style zapewniają spójny wygląd przycisków w całej aplikacji, z uwzględnieniem różnych wariantów i responsywności.
+
+## Krok 15: Tworzenie backendu
+
+Otwórz nowy terminal i stwórz folder na backend:
+
+```bash
+mkdir backend
+cd backend
+npm init -y fileshare-backend
+```
+
+### Struktura plików backendu:
+
+```
+backend
+├── src - kod źródłowy backendu
+│ ├── config - konfiguracja
+│ │ └── config.js - zmienne konfiguracyjne
+│ ├── middleware - funkcje pośrednie Express
+│ │ └── upload.js - obsługa wysyłania plików
+│ ├── routes - endpointy API
+│ │ └── file.js - endpointy do obsługi plików
+│ ├── services - logika biznesowa
+│ │ └── file.js - operacje na plikach
+│ │ └── metadata.js - obsługa metadanych plików
+│ ├── package.json - zależności projektu
+│ ├── index.js - główny plik serwera
+```
