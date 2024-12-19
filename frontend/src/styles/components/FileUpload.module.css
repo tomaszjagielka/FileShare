@@ -12,10 +12,6 @@
   background: rgba(100, 108, 255, 0.05);
 }
 
-.dropZone.dragging {
-  background: rgba(100, 108, 255, 0.1);
-}
-
 .fileInput {
   display: none;
 }
