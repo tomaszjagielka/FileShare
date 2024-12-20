@@ -5,6 +5,55 @@ _FileShare - aplikacja do udostępniania plików_
 
 Cześć! Ten tutorial pomoże Ci stworzyć prostą aplikację do udostępniania plików. Jest przeznaczony dla studentów Politechniki Poznańskiej na przedmiot Aplikacje Internetowe.
 
+> **Uwaga od autora**: W mojej opinii lepszym rozwiązaniem byłoby użycie:
+>
+> - **TypeScript** zamiast JavaScript - dla lepszego typowania, wykrywania błędów na etapie kompilacji i lepszego DX
+> - **Next.js** jako framework frontendowy - dla server-side rendering, API routes, optymalizacji obrazów i lepszego SEO
+> - **Nest.js** jako framework backendowy - dla lepszej architektury, wbudowanego DI i modułowej struktury (jeśli chcemy zostać w ekosystemie JS/TS)
+> - **PostgreSQL** do przechowywania metadanych, kont użytkowników i relacji między danymi
+> - **Redis** do cachowania często pobieranych danych i kolejkowania zadań
+> - **AWS S3 Buckets** do bezpiecznego przechowywania plików użytkowników
+>
+> Jednak dla celów edukacyjnych i prostoty, w tym tutorialu użyjemy podstawowych technologii.
+
+## Agenda
+
+### Wprowadzenie
+
+- [Co będziemy robić?](#co-będziemy-robić)
+- [Wymagania](#wymagania)
+
+### Frontend
+
+1. [Przygotowanie projektu](#krok-1-przygotowanie-projektu)
+2. [Tworzenie frontendu](#krok-2-tworzenie-frontendu)
+   - [Konfiguracja Vite](#krok-21-konfiguracja-vite)
+3. [Pierwsze zmiany w komponentach](#krok-3-pierwsze-zmiany)
+4. [Podstawowy layout](#krok-4-podstawowy-layout)
+5. [Podstawowe style](#krok-5-podstawowe-style)
+6. [Tworzenie funkcji pomocniczych](#krok-6-tworzenie-funkcji-pomocniczych)
+7. [Konfiguracja komunikacji z API](#krok-7-konfiguracja-komunikacji-z-api)
+8. [Tworzenie hooków React](#krok-8-tworzenie-hooków-react)
+9. [Tworzenie komponentu FileList](#krok-9-tworzenie-komponentu-filelist)
+10. [Tworzenie komponentu FileUpload](#krok-11-tworzenie-komponentu-fileupload)
+11. [Tworzenie komponentu Header](#krok-12-tworzenie-komponentu-header)
+12. [Feedback i komunikaty](#krok-13-feedback-i-komunikaty)
+13. [Style dla przycisków](#krok-14-style-dla-przycisków)
+
+### Backend
+
+14. [Inicjalizacja backendu](#krok-15-inicjalizacja-backendu)
+15. [Struktura projektu](#krok-16-struktura-projektu)
+16. [Konfiguracja package.json](#krok-17-konfiguracja-packagejson)
+17. [Konfiguracja .gitignore](#krok-18-konfiguracja-gitignore)
+18. [Zmienne środowiskowe](#krok-19-zmienne-środowiskowe)
+19. [Uruchomienie serwera](#krok-20-uruchomienie-serwera)
+20. [Główny plik aplikacji](#krok-21-główny-plik-aplikacji)
+21. [Konfiguracja aplikacji](#krok-22-konfiguracja-aplikacji)
+22. [Serwisy aplikacji](#krok-23-serwisy-aplikacji)
+23. [Routing aplikacji](#krok-24-routing-aplikacji)
+24. [Dokumentacja API](#krok-25-dokumentacja-api)
+
 ## Co będziemy robić?
 
 Zbudujemy aplikację webową składającą się z:
@@ -1319,7 +1368,7 @@ createRoot(document.getElementById("root")).render(
 
 Ta kolejność zapewnia prawidłowe nadpisywanie stylów i unikanie konfliktów.
 
-Teraz stworzymy style dla stanów ładowania i komunikatów o błędach, które będą używane w całej aplikacji.
+Teraz stworzymy style dla stanów ładowania i komunikatów o błędów, które będą używane w całej aplikacji.
 
 1. Stwórz plik `frontend/src/styles/components/Feedback.module.css`:
 
