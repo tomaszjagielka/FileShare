@@ -96,6 +96,43 @@ frontend
     └── formatters.js - formatowanie danych
 ```
 
+## Krok 2.1: Konfiguracja Vite
+
+Po utworzeniu projektu, musimy skonfigurować proxy dla API. Zaktualizuj plik `frontend/vite.config.js`:
+
+```javascript
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+
+export default defineConfig({
+  plugins: [react()],
+  server: {
+    port: 5173,
+    proxy: {
+      "/api": {
+        target: "http://localhost:3001",
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, ""),
+      },
+    },
+  },
+});
+```
+
+### Co robi ta konfiguracja?
+
+1. **Port serwera**:
+
+   - Ustawia port deweloperski na 5173
+
+2. **Proxy API**:
+   - Przekierowuje wszystkie żądania `/api/*` do backendu
+   - Backend działa na `http://localhost:3001`
+   - Usuwa przedrostek `/api` z ścieżki żądania
+   - Przykład: `/api/files` → `http://localhost:3001/files`
+
+Ta konfiguracja pozwala na bezproblemową komunikację między frontendem a backendem podczas developmentu.
+
 ## Krok 3: Pierwsze zmiany
 
 Zmieńmy tytuł strony. W pliku `frontend/index.html`:
@@ -1439,7 +1476,7 @@ Teraz stworzymy współdzielone style dla przycisków, które będą używane w 
 
 Te style zapewniają spójny wygląd przycisków w całej aplikacji, z uwzględnieniem różnych wariantów i responsywności.
 
-## Krok 15: Tworzenie backendu
+## Krok 15: Inicjalizacja backendu
 
 Otwórz nowy terminal i stwórz folder na backend:
 
@@ -1449,20 +1486,388 @@ cd backend
 npm init -y fileshare-backend
 ```
 
-### Struktura plików backendu:
+## Krok 16: Struktura projektu
 
 ```
-backend
-├── src - kod źródłowy backendu
-│ ├── config - konfiguracja
-│ │ └── config.js - zmienne konfiguracyjne
-│ ├── middleware - funkcje pośrednie Express
-│ │ └── upload.js - obsługa wysyłania plików
-│ ├── routes - endpointy API
-│ │ └── file.js - endpointy do obsługi plików
-│ ├── services - logika biznesowa
-│ │ └── file.js - operacje na plikach
-│ │ └── metadata.js - obsługa metadanych plików
-│ ├── package.json - zależności projektu
-│ ├── index.js - główny plik serwera
+backend/
+├── src/                  # Kod źródłowy
+│   ├── app.js            # Główny plik aplikacji
+│   ├── config/           # Konfiguracja
+│   │   └── config.js     # Ustawienia aplikacji
+│   ├── middleware/       # Middleware
+│   │   └── upload.js     # Middleware do obsługi plików
+│   ├── routes/           # Routing
+│   │   └── file.js       # Endpointy związane z plikami
+│   └── services/         # Serwisy
+│       ├── file.js       # Operacje na plikach
+│       └── metadata.js   # Zarządzanie metadanymi
+├── .env                  # Zmienne środowiskowe
+├── .gitignore            # Ignorowane pliki
+└── package.json          # Konfiguracja projektu
 ```
+
+## Krok 17: Konfiguracja package.json
+
+```json
+{
+  "scripts": {
+    "start": "node src/app.js",
+    "dev": "nodemon src/app.js"
+  },
+  "nodemonConfig": {
+    "ignore": ["uploads/*", "*.test.js"]
+  }
+}
+```
+
+## Krok 18: Konfiguracja .gitignore
+
+Stwórz plik `.gitignore` w folderze backend:
+
+```gitignore
+# Dependencies
+node_modules
+
+# Uploads
+uploads/*
+
+# Editor and OS files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+```
+
+Ten plik `.gitignore` określa:
+
+- Ignorowanie folderu `node_modules` i `package-lock.json`
+- Ignorowanie plików środowiskowych (`.env`)
+- Ignorowanie logów
+- Ignorowanie zawartości folderu `uploads` (z wyjątkiem pliku `.gitkeep`)
+- Ignorowanie plików IDE i systemowych
+
+## Krok 19: Zmienne środowiskowe
+
+Stwórz plik `.env`:
+
+```env
+PORT=3001
+UPLOAD_DIR=./uploads
+```
+
+## Krok 20: Uruchomienie serwera
+
+```bash
+npm run dev
+```
+
+Serwer będzie dostępny pod adresem http://localhost:3001.
+
+## Krok 21: Główny plik aplikacji
+
+Stwórz główny plik aplikacji `src/app.js`:
+
+```javascript
+import express from "express";
+import cors from "cors";
+import fs from "fs/promises";
+import { fileService } from "./services/file.js";
+import { metadataService } from "./services/metadata.js";
+import { config } from "./config/config.js";
+import fileRoutes from "./routes/file.js";
+
+const initializeApp = async () => {
+  // Upewnij się, że folder uploads istnieje
+  try {
+    await fs.access(config.uploadsDir);
+  } catch {
+    await fs.mkdir(config.uploadsDir, { recursive: true });
+  }
+
+  const app = express();
+
+  // Middleware
+  app.use(cors(config.corsOptions));
+  app.use(express.json());
+
+  // Inicjalizacja serwisów
+  await metadataService.loadMetadata();
+  await fileService.scanExistingFiles(metadataService.getMetadata());
+
+  // Routing
+  app.use("/", fileRoutes);
+
+  // Uruchomienie serwera
+  app.listen(config.port, () => {
+    console.log(`Server running at http://localhost:${config.port}`);
+  });
+};
+
+initializeApp().catch(console.error);
+```
+
+## Krok 22: Konfiguracja aplikacji
+
+Stwórz plik konfiguracyjny `src/config/config.js`:
+
+```javascript
+import dotenv from "dotenv";
+import path from "path";
+import { fileURLToPath } from "url";
+
+dotenv.config();
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+export const config = {
+  port: process.env.PORT || 3001,
+  uploadsDir: path.join(
+    __dirname,
+    "../../",
+    process.env.UPLOAD_DIR || "uploads"
+  ),
+  corsOptions: {
+    origin: "http://localhost:5173", // Adres frontendu
+    optionsSuccessStatus: 200,
+  },
+};
+
+// Ścieżka do pliku z metadanymi
+export const metadataPath = path.join(config.uploadsDir, "metadata.json");
+```
+
+## Krok 23: Serwisy aplikacji
+
+Stwórz podstawowe serwisy:
+
+`src/services/metadata.js`:
+
+```javascript
+import fs from "fs/promises";
+import { metadataPath } from "../config/config.js";
+
+class MetadataService {
+  #metadata = new Map();
+
+  async loadMetadata() {
+    try {
+      const data = await fs.readFile(metadataPath, "utf8");
+      const parsedData = JSON.parse(data);
+      this.#metadata = new Map(Object.entries(parsedData));
+    } catch (error) {
+      if (error.code !== "ENOENT") {
+        console.error("Error loading metadata:", error);
+      }
+    }
+  }
+
+  async saveMetadata() {
+    try {
+      await fs.writeFile(
+        metadataPath,
+        JSON.stringify(Object.fromEntries(this.#metadata))
+      );
+    } catch (error) {
+      console.error("Error saving metadata:", error);
+      throw error;
+    }
+  }
+
+  setMetadata(fileId, metadata) {
+    this.#metadata.set(fileId, metadata);
+  }
+
+  getMetadata() {
+    return this.#metadata;
+  }
+}
+
+export const metadataService = new MetadataService();
+```
+
+`src/services/file.js`:
+
+```javascript
+import fs from "fs/promises";
+import path from "path";
+import { config } from "../config/config.js";
+
+class FileService {
+  #fileRegistry = new Map();
+
+  async scanExistingFiles(metadata) {
+    try {
+      const files = await fs.readdir(config.uploadsDir);
+
+      for (const filename of files) {
+        if (filename === ".gitkeep" || filename === "metadata.json") continue;
+
+        const filePath = path.join(config.uploadsDir, filename);
+        const stats = await fs.stat(filePath);
+        const fileId = filename;
+        const fileMetadata = metadata.get(fileId);
+
+        if (!this.#fileRegistry.has(fileId)) {
+          this.#fileRegistry.set(fileId, {
+            fileId,
+            filename: fileId,
+            originalName: fileMetadata?.originalName || fileId,
+            size: stats.size,
+            uploadDate: fileMetadata?.uploadDate || stats.mtime.toISOString(),
+          });
+        }
+      }
+      console.log(`Scanned ${files.length} existing files`);
+    } catch (error) {
+      console.error("Error scanning existing files:", error);
+      throw error;
+    }
+  }
+
+  registerFile(fileInfo) {
+    this.#fileRegistry.set(fileInfo.fileId, fileInfo);
+  }
+
+  getFileInfo(fileId) {
+    return this.#fileRegistry.get(fileId);
+  }
+
+  getAllFiles() {
+    return Array.from(this.#fileRegistry.values());
+  }
+}
+
+export const fileService = new FileService();
+```
+
+## Krok 24: Routing aplikacji
+
+Stwórz podstawowy routing w `src/routes/file.js`:
+
+```javascript
+import { Router } from "express";
+import path from "path";
+import { fileService } from "../services/file.js";
+import { metadataService } from "../services/metadata.js";
+import { upload } from "../middleware/upload.js";
+import { config } from "../config/config.js";
+
+const router = Router();
+
+router.post("/upload", upload.single("file"), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: "No file uploaded" });
+    }
+
+    const file = req.file;
+    const fileId = file.filename;
+    const uploadDate = new Date().toISOString();
+
+    const fileInfo = {
+      fileId,
+      filename: fileId,
+      originalName: file.originalname,
+      size: file.size,
+      uploadDate,
+    };
+
+    fileService.registerFile(fileInfo);
+    metadataService.setMetadata(fileId, {
+      originalName: file.originalname,
+      uploadDate,
+    });
+    await metadataService.saveMetadata();
+
+    res.json(fileInfo);
+  } catch (error) {
+    console.error("Upload error:", error);
+    res.status(500).json({ error: "Upload failed", details: error.message });
+  }
+});
+
+router.get("/files", (req, res) => {
+  res.json(fileService.getAllFiles());
+});
+
+router.get("/download/:fileId", async (req, res) => {
+  const { fileId } = req.params;
+  const fileInfo = fileService.getFileInfo(fileId);
+
+  if (!fileInfo) {
+    return res.status(404).json({ error: "File not found in registry" });
+  }
+
+  try {
+    const filePath = path.join(config.uploadsDir, fileInfo.filename);
+    return res.download(filePath, fileInfo.originalName);
+  } catch (error) {
+    console.error("Error downloading file:", error);
+    res.status(500).json({
+      error: "Failed to download file",
+      details: error.message,
+    });
+  }
+});
+
+export default router;
+```
+
+## Krok 25: Dokumentacja API
+
+1. **Upload pliku** - `POST /upload`
+
+   - Przyjmuje plik przez multipart/form-data
+   - Używa middleware `upload.single("file")`
+   - Zapisuje plik i metadane
+   - Zwraca informacje o zapisanym pliku
+
+2. **Lista plików** - `GET /files`
+
+   - Zwraca listę wszystkich dostępnych plików
+   - Zawiera podstawowe informacje o każdym pliku
+
+3. **Pobieranie pliku** - `GET /download/:fileId`
+   - Pobiera plik o podanym ID
+   - Używa oryginalnej nazwy pliku
+   - Obsługuje błędy (404, 500)
+
+### Przykłady użycia
+
+1. **Upload pliku**:
+
+```bash
+curl -X POST -F "file=@dokument.pdf" http://localhost:3001/upload
+```
+
+2. **Lista plików**:
+
+```bash
+curl http://localhost:3001/files
+```
+
+3. **Pobieranie pliku**:
+
+```bash
+curl http://localhost:3001/download/123 --output dokument.pdf
+```
+
+### Obsługa błędów
+
+- Brak pliku w żądaniu upload
+- Plik nie znaleziony przy pobieraniu
+- Błędy serwera przy operacjach na plikach

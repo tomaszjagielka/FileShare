@@ -16,9 +16,7 @@ export function FileList({ files }) {
   });
 
   const handleCopyLink = (fileId) => {
-    if (!fileId) {
-      return;
-    }
+    if (!fileId) return;
 
     navigator.clipboard
       .writeText(getDownloadUrl(fileId))
@@ -27,9 +25,7 @@ export function FileList({ files }) {
   };
 
   const handleDownload = (fileId) => {
-    if (!fileId) {
-      return;
-    }
+    if (!fileId) return;
 
     window.location.href = getDownloadUrl(fileId);
   };
@@ -86,6 +82,6 @@ FileList.propTypes = {
       originalName: PropTypes.string,
       size: PropTypes.number,
       uploadDate: PropTypes.string,
-    }),
+    })
   ).isRequired,
 };
