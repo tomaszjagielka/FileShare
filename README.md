@@ -5,17 +5,6 @@ _FileShare - aplikacja do udostępniania plików_
 
 Cześć! Ten tutorial pomoże Ci stworzyć prostą aplikację do udostępniania plików. Jest przeznaczony dla studentów Politechniki Poznańskiej na przedmiot Aplikacje Internetowe.
 
-> **Uwaga od autora**: W mojej opinii lepszym rozwiązaniem byłoby użycie:
->
-> - **TypeScript** zamiast JavaScript - dla lepszego typowania, wykrywania błędów na etapie kompilacji i lepszego DX
-> - **Next.js** jako framework frontendowy - dla server-side rendering, API routes, optymalizacji obrazów i lepszego SEO
-> - **Nest.js** jako framework backendowy - dla lepszej architektury, wbudowanego DI i modułowej struktury (jeśli chcemy zostać w ekosystemie JS/TS)
-> - **PostgreSQL** do przechowywania metadanych, kont użytkowników i relacji między danymi
-> - **Redis** do cachowania często pobieranych danych i kolejkowania zadań
-> - **AWS S3 Buckets** do bezpiecznego przechowywania plików użytkowników
->
-> Jednak dla celów edukacyjnych i prostoty, w tym tutorialu użyjemy podstawowych technologii.
-
 ## Agenda
 
 ### Wprowadzenie
@@ -66,6 +55,17 @@ Użyjemy do tego:
 - JavaScript po stronie frontendu i backendu
 - Frontend: React + Vite (lokalny serwer programistyczny frontendu)
 - Backend: Node.js + Express.js (serwer backendu)
+
+> **Uwaga od autora**: W mojej opinii lepszym rozwiązaniem byłoby użycie:
+>
+> - **TypeScript** zamiast JavaScript - dla lepszego typowania, wykrywania błędów na etapie kompilacji i lepszego DX
+> - **Next.js** jako framework frontendowy - dla server-side rendering, API routes, optymalizacji obrazów i lepszego SEO
+> - **Nest.js** jako framework backendowy - dla lepszej architektury, wbudowanego DI i modułowej struktury (jeśli chcemy zostać w ekosystemie JS/TS)
+> - **PostgreSQL** do przechowywania metadanych, kont użytkowników i relacji między danymi
+> - **Redis** do cachowania często pobieranych danych i kolejkowania zadań
+> - **AWS S3 Buckets** do bezpiecznego przechowywania plików użytkowników
+>
+> Jednak dla celów edukacyjnych i prostoty, w tym tutorialu użyjemy podstawowych technologii.
 
 ## Wymagania
 
