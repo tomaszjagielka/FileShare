@@ -1920,3 +1920,6 @@ curl http://localhost:3001/download/123 --output dokument.pdf
 - Brak pliku w żądaniu upload
 - Plik nie znaleziony przy pobieraniu
 - Błędy serwera przy operacjach na plikach
+
+### Autorzy
+Tomasz Jagiełka
